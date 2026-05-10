@@ -182,7 +182,13 @@ class BinanceFuturesClient:
                 self.logger.warning("🔴 RUNNING IN PRODUCTION MODE - Real money!")
 
         if not self.api_key or not self.api_secret:
-            raise ValueError("API credentials not provided. Set env vars or pass directly.")
+            env_mode = os.getenv("ENV", "paper").lower().strip()
+            if env_mode == "paper":
+                self.logger.info(
+                    "Binance client running public-only in PAPER mode; signed endpoints are disabled."
+                )
+            else:
+                raise ValueError("API credentials not provided. Set env vars or pass directly.")
 
         # SOTA (Jan 2026): Inject ExchangeFilterService for dynamic precision
         self.filter_service = filter_service
@@ -296,6 +302,9 @@ class BinanceFuturesClient:
         Raises:
             Exception: If request fails after retries
         """
+        if not self.api_key or not self.api_secret:
+            raise ValueError("Signed Binance request requires API credentials.")
+
         MAX_RETRIES = 2  # SOTA FIX: Reduced from 3 to 2 for faster fail on testnet
         retry_count = 0
         last_error = None

@@ -460,7 +460,7 @@ async def debug_signal_persistence():
     # 1. Check RealtimeService instances
     symbols_checked = []
     for key, instance in container._instances.items():
-        if key.startswith('realtime_service_'):
+        if isinstance(key, str) and key.startswith('realtime_service_'):
             symbol = key.replace('realtime_service_', '')
             has_lifecycle = hasattr(instance, '_lifecycle_service') and instance._lifecycle_service is not None
             symbols_checked.append({
@@ -916,7 +916,7 @@ async def enable_circuit_breaker(
     enabled_count = 0
 
     for key, service in container._instances.items():
-        if key.startswith('realtime_service_'):
+        if isinstance(key, str) and key.startswith('realtime_service_'):
             service.enable_circuit_breaker(
                 max_consecutive_losses=max_consecutive_losses,
                 cooldown_hours=cooldown_hours,
@@ -944,7 +944,7 @@ async def disable_circuit_breaker():
     disabled_count = 0
 
     for key, service in container._instances.items():
-        if key.startswith('realtime_service_'):
+        if isinstance(key, str) and key.startswith('realtime_service_'):
             service.disable_circuit_breaker()
             disabled_count += 1
 
@@ -973,7 +973,7 @@ async def get_circuit_breaker_status():
     # Legacy: per-service CB status (for backwards compatibility)
     per_service = {}
     for key, service in container._instances.items():
-        if key.startswith('realtime_service_'):
+        if isinstance(key, str) and key.startswith('realtime_service_'):
             symbol = key.replace('realtime_service_', '')
             if hasattr(service, 'get_circuit_breaker_status'):
                 per_service[symbol] = service.get_circuit_breaker_status()
