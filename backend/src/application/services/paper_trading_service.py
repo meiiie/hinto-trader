@@ -80,9 +80,15 @@ class PaperTradingService:
     FUNDING_RATE_PCT = 0.0001   # 0.01% per 8 hours (Binance default)
     FUNDING_INTERVAL_HOURS = 8
 
-    def __init__(self, repository: IOrderRepository, market_data_repository: Optional[SQLiteMarketDataRepository] = None):
+    def __init__(
+        self,
+        repository: IOrderRepository,
+        market_data_repository: Optional[SQLiteMarketDataRepository] = None,
+        signal_lifecycle_service=None,
+    ):
         self.repo = repository
         self.market_data_repo = market_data_repository
+        self.signal_lifecycle_service = signal_lifecycle_service
 
         # SOTA: Load from Settings (persisted in SQLite) instead of hardcoding.
         # Defaults mirror the documented production contract.
@@ -116,6 +122,30 @@ class PaperTradingService:
         self.on_order_filled: Optional[Callable[[str], None]] = None
         # Called when a position is closed (SL/TP/LIQ/MANUAL)
         self.on_position_closed: Optional[Callable[[str, str], None]] = None
+
+    def _mark_signal_pending(self, signal_id: Optional[str]) -> None:
+        if not signal_id or not self.signal_lifecycle_service:
+            return
+        try:
+            self.signal_lifecycle_service.mark_pending(signal_id)
+        except Exception as e:
+            logger.warning(f"Failed to mark paper signal pending {signal_id}: {e}")
+
+    def _mark_signal_executed(self, signal_id: Optional[str], order_id: str) -> None:
+        if not signal_id or not self.signal_lifecycle_service:
+            return
+        try:
+            self.signal_lifecycle_service.mark_executed(signal_id, order_id)
+        except Exception as e:
+            logger.warning(f"Failed to mark paper signal executed {signal_id}: {e}")
+
+    def _mark_signal_expired(self, signal_id: Optional[str]) -> None:
+        if not signal_id or not self.signal_lifecycle_service:
+            return
+        try:
+            self.signal_lifecycle_service.mark_expired(signal_id)
+        except Exception as e:
+            logger.warning(f"Failed to mark paper signal expired {signal_id}: {e}")
 
     def get_wallet_balance(self) -> float:
         """Get Wallet Balance (Total Deposited + Realized PnL)"""
@@ -394,6 +424,7 @@ class PaperTradingService:
         )
 
         self.repo.save_order(position)
+        self._mark_signal_pending(signal.id)
 
         # SOTA SYNC: Lock margin immediately (matches Backtest line 277)
         self._locked_in_orders += margin_required
@@ -500,6 +531,7 @@ class PaperTradingService:
                 order.exit_reason = 'TTL_EXPIRED'
                 order.close_time = datetime.now()
                 self.repo.update_order(order)
+                self._mark_signal_expired(order.signal_id)
                 continue
 
             is_filled = False
@@ -551,6 +583,7 @@ class PaperTradingService:
                     order.exit_reason = 'MERGED'
                     order.close_time = datetime.now()
                     self.repo.update_order(order)
+                    self._mark_signal_executed(order.signal_id, order.id)
 
                     logger.info(f"🔗 MERGED {order.side} {order.symbol} | New Avg Entry: {avg_entry:.2f}")
 
@@ -561,6 +594,7 @@ class PaperTradingService:
                     # Store initial quantity for partial TP
                     order.initial_quantity = order.quantity
                     self.repo.update_order(order)
+                    self._mark_signal_executed(order.signal_id, order.id)
                     logger.info(f"✅ FILLED {order.side} {order.symbol} @ {order.entry_price} (fee: ${entry_fee:.4f})")
 
                     # ISSUE-001 Fix: Notify state machine of order fill

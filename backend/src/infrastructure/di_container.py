@@ -840,7 +840,8 @@ class DIContainer:
 
             self._instances['paper_trading_service'] = PaperTradingService(
                 repository=order_repository,
-                market_data_repository=market_data_repository
+                market_data_repository=market_data_repository,
+                signal_lifecycle_service=self.get_signal_lifecycle_service()
             )
             self.logger.info("Created PaperTradingService with order repository")
 
