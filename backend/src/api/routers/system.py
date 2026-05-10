@@ -472,11 +472,20 @@ async def debug_signal_persistence():
     result["services"]["realtime_instances"] = symbols_checked
 
     # 2. Check SignalLifecycleService
-    if 'signal_lifecycle_service' in container._instances:
-        lifecycle_svc = container._instances['signal_lifecycle_service']
+    lifecycle_key = next(
+        (
+            key for key in container._instances
+            if isinstance(key, str) and key.startswith('signal_lifecycle_service')
+        ),
+        None,
+    )
+
+    if lifecycle_key:
+        lifecycle_svc = container._instances[lifecycle_key]
         repo = lifecycle_svc.repo
         result["services"]["lifecycle_service"] = {
             "exists": True,
+            "key": lifecycle_key,
             "id": id(lifecycle_svc),
             "ttl_seconds": lifecycle_svc.ttl_seconds
         }
@@ -599,7 +608,16 @@ async def debug_signal_check():
     }
 
     # 1. State Machine Status
-    state_machine = realtime_service.state_machine
+    state_machine = getattr(realtime_service, "state_machine", None)
+    if state_machine is None:
+        from types import SimpleNamespace
+        is_running = bool(getattr(realtime_service, "_is_running", False))
+        state_machine = SimpleNamespace(
+            state=SimpleNamespace(name="RUNNING" if is_running else "STOPPED"),
+            can_receive_signals=is_running,
+            is_halted=False,
+            cooldown_remaining=0,
+        )
     result["state_machine"] = {
         "current_state": state_machine.state.name,
         "can_receive_signals": state_machine.can_receive_signals,
@@ -706,9 +724,11 @@ async def debug_signal_check():
 
         # Volume Spike
         volumes = [c.volume for c in candles_1m]
-        volume_spike_result = realtime_service.signal_generator.volume_spike_detector.detect_spike_from_list(
-            volumes=volumes,
-            ma_period=20
+        volume_spike_detector = getattr(realtime_service, "volume_spike_detector", None)
+        volume_spike_result = (
+            volume_spike_detector.detect_spike_from_list(volumes=volumes, ma_period=20)
+            if volume_spike_detector
+            else None
         )
         if volume_spike_result:
             result["indicators"]["volume"] = {
@@ -853,10 +873,11 @@ async def debug_signal_check():
         result["sell_conditions"] = sell_conditions
 
         # 7. Hard Filters
-        if realtime_service.hard_filters:
+        hard_filters = getattr(realtime_service, "hard_filters", None)
+        if hard_filters:
             result["hard_filters"]["adx_filter_enabled"] = True
             if adx_result:
-                adx_check = realtime_service.hard_filters.check_adx_filter(adx_result.adx_value)
+                adx_check = hard_filters.check_adx_filter(adx_result.adx_value)
                 result["hard_filters"]["adx_passed"] = adx_check.passed
                 result["hard_filters"]["adx_reason"] = adx_check.reason
 

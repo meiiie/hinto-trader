@@ -418,6 +418,7 @@ async def get_token_watchlist(
     custom_tokens_str = settings.get('custom_tokens', '')
     custom_tokens = set(custom_tokens_str.split(',')) if custom_tokens_str else set()
     custom_tokens.discard('')  # Remove empty string
+    custom_tokens.update(t for t in enabled_tokens if t and t not in DEFAULT_SYMBOLS)
 
     # Build response: Default tokens first, then custom tokens
     tokens = []
@@ -456,6 +457,13 @@ async def update_token_watchlist(
 
     # Store as comma-separated string
     paper_service.repo.set_setting('enabled_tokens', ','.join(enabled_tokens))
+
+    # Preserve non-default submitted symbols as custom tokens, otherwise they
+    # disappear from GET /settings/tokens after being enabled.
+    existing_custom = str(paper_service.repo.get_all_settings().get('custom_tokens', '') or '')
+    custom_tokens = {t for t in existing_custom.split(',') if t}
+    custom_tokens.update(t.symbol for t in watchlist.tokens if t.symbol not in DEFAULT_SYMBOLS)
+    paper_service.repo.set_setting('custom_tokens', ','.join(sorted(custom_tokens)))
 
     # Return updated watchlist
     return await get_token_watchlist(paper_service)

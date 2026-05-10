@@ -78,8 +78,10 @@ class SQLiteMarketDataRepository(MarketDataRepository):
 
     def _create_table_if_not_exists(self, cursor, table: str) -> None:
         """Create OHLCV table if it doesn't exist."""
+        table_sql = self._quote_identifier(table)
+        index_sql = self._quote_identifier(f"idx_{table}_timestamp")
         cursor.execute(f'''
-            CREATE TABLE IF NOT EXISTS {table} (
+            CREATE TABLE IF NOT EXISTS {table_sql} (
                 timestamp TEXT PRIMARY KEY,
                 open REAL,
                 high REAL,
@@ -92,8 +94,8 @@ class SQLiteMarketDataRepository(MarketDataRepository):
             )
         ''')
         cursor.execute(f'''
-            CREATE INDEX IF NOT EXISTS idx_{table}_timestamp
-            ON {table}(timestamp)
+            CREATE INDEX IF NOT EXISTS {index_sql}
+            ON {table_sql}(timestamp)
         ''')
 
     def _ensure_table_exists(self, symbol: str, timeframe: str) -> str:
@@ -130,6 +132,11 @@ class SQLiteMarketDataRepository(MarketDataRepository):
         """
         return f"{symbol.lower()}_{timeframe}"
 
+    @staticmethod
+    def _quote_identifier(identifier: str) -> str:
+        """Quote SQLite identifiers, including symbols that start with digits."""
+        return '"' + identifier.replace('"', '""') + '"'
+
     def save_candle(self, candle: Candle, indicator: Indicator, timeframe: str, symbol: str = 'btcusdt') -> None:
         """
         Save candle with indicators.
@@ -142,11 +149,12 @@ class SQLiteMarketDataRepository(MarketDataRepository):
         """
         try:
             table = self._ensure_table_exists(symbol, timeframe)
+            table_sql = self._quote_identifier(table)
 
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(f'''
-                    INSERT OR REPLACE INTO {table}
+                    INSERT OR REPLACE INTO {table_sql}
                     (timestamp, open, high, low, close, volume, ema_7, rsi_6, volume_ma_20)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
@@ -181,11 +189,12 @@ class SQLiteMarketDataRepository(MarketDataRepository):
         """
         try:
             table = self._ensure_table_exists(symbol, timeframe)
+            table_sql = self._quote_identifier(table)
 
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(f'''
-                    INSERT OR REPLACE INTO {table}
+                    INSERT OR REPLACE INTO {table_sql}
                     (timestamp, open, high, low, close, volume, ema_7, rsi_6, volume_ma_20)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
@@ -217,6 +226,7 @@ class SQLiteMarketDataRepository(MarketDataRepository):
         """
         try:
             table = self._get_table_name(symbol, timeframe)
+            table_sql = self._quote_identifier(table)
 
             with self._get_connection() as conn:
                 cursor = conn.cursor()
@@ -234,7 +244,7 @@ class SQLiteMarketDataRepository(MarketDataRepository):
                 cursor.execute(f'''
                     SELECT timestamp, open, high, low, close, volume,
                            ema_7, rsi_6, volume_ma_20
-                    FROM {table}
+                    FROM {table_sql}
                     ORDER BY timestamp DESC
                     LIMIT ?
                 ''', (limit,))
@@ -271,13 +281,14 @@ class SQLiteMarketDataRepository(MarketDataRepository):
         """Get candles within date range"""
         try:
             table = self._get_table_name(symbol, timeframe)
+            table_sql = self._quote_identifier(table)
 
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(f'''
                     SELECT timestamp, open, high, low, close, volume,
                            ema_7, rsi_6, volume_ma_20
-                    FROM {table}
+                    FROM {table_sql}
                     WHERE timestamp BETWEEN ? AND ?
                     ORDER BY timestamp DESC
                 ''', (start.isoformat(), end.isoformat()))
@@ -305,13 +316,14 @@ class SQLiteMarketDataRepository(MarketDataRepository):
         """Get specific candle by timestamp"""
         try:
             table = self._get_table_name(symbol, timeframe)
+            table_sql = self._quote_identifier(table)
 
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(f'''
                     SELECT timestamp, open, high, low, close, volume,
                            ema_7, rsi_6, volume_ma_20
-                    FROM {table}
+                    FROM {table_sql}
                     WHERE timestamp = ?
                 ''', (timestamp.isoformat(),))
 
@@ -333,10 +345,11 @@ class SQLiteMarketDataRepository(MarketDataRepository):
         """Get total record count"""
         try:
             table = self._get_table_name(symbol, timeframe)
+            table_sql = self._quote_identifier(table)
 
             with self._get_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute(f'SELECT COUNT(*) FROM {table}')
+                cursor.execute(f'SELECT COUNT(*) FROM {table_sql}')
                 return cursor.fetchone()[0]
         except Exception as e:
             raise RepositoryError(f"Failed to get record count: {e}", e)
@@ -345,10 +358,11 @@ class SQLiteMarketDataRepository(MarketDataRepository):
         """Get latest timestamp"""
         try:
             table = self._get_table_name(symbol, timeframe)
+            table_sql = self._quote_identifier(table)
 
             with self._get_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute(f'SELECT MAX(timestamp) FROM {table}')
+                cursor.execute(f'SELECT MAX(timestamp) FROM {table_sql}')
                 result = cursor.fetchone()[0]
                 return datetime.fromisoformat(result) if result else None
         except Exception as e:
@@ -362,11 +376,18 @@ class SQLiteMarketDataRepository(MarketDataRepository):
         """
         try:
             table = self._get_table_name(symbol, timeframe)
+            table_sql = self._quote_identifier(table)
 
             with self._get_connection() as conn:
                 cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                    (table,),
+                )
+                if not cursor.fetchone():
+                    return 0
                 cursor.execute(f'''
-                    DELETE FROM {table}
+                    DELETE FROM {table_sql}
                     WHERE timestamp < ?
                 ''', (before.isoformat(),))
                 conn.commit()
@@ -405,20 +426,21 @@ class SQLiteMarketDataRepository(MarketDataRepository):
         """Get table information"""
         try:
             table = self._get_table_name(symbol, timeframe)
+            table_sql = self._quote_identifier(table)
 
             with self._get_connection() as conn:
                 cursor = conn.cursor()
 
                 # Get record count
-                cursor.execute(f'SELECT COUNT(*) FROM {table}')
+                cursor.execute(f'SELECT COUNT(*) FROM {table_sql}')
                 record_count = cursor.fetchone()[0]
 
                 # Get latest record
-                cursor.execute(f'SELECT MAX(timestamp) FROM {table}')
+                cursor.execute(f'SELECT MAX(timestamp) FROM {table_sql}')
                 latest = cursor.fetchone()[0]
 
                 # Get oldest record
-                cursor.execute(f'SELECT MIN(timestamp) FROM {table}')
+                cursor.execute(f'SELECT MIN(timestamp) FROM {table_sql}')
                 oldest = cursor.fetchone()[0]
 
                 return {

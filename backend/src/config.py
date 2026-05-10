@@ -161,6 +161,7 @@ class MultiTokenConfig:
                 cursor.execute("SELECT value FROM settings WHERE key = 'custom_tokens'")
                 custom_row = cursor.fetchone()
                 custom_tokens = set(custom_row[0].split(',')) if custom_row and custom_row[0] else set()
+                custom_tokens.discard('')
                 logging.info(f"📊 DEBUG: custom_tokens from DB = {custom_tokens}")
 
                 # Get enabled tokens
@@ -168,6 +169,10 @@ class MultiTokenConfig:
                 enabled_row = cursor.fetchone()
                 if enabled_row and enabled_row[0]:
                     enabled_tokens = set(enabled_row[0].split(','))
+                    enabled_tokens.discard('')
+                    # Older paper/live DBs may store custom symbols only in
+                    # enabled_tokens. Treat those as custom watchlist symbols.
+                    custom_tokens.update(t for t in enabled_tokens if t not in DEFAULT_SYMBOLS)
                 else:
                     # No enabled_tokens setting - use all defaults + custom
                     enabled_tokens = set(DEFAULT_SYMBOLS) | custom_tokens
