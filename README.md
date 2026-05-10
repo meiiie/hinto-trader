@@ -8,6 +8,7 @@
 
 <p align="center">
   <a href="#features">Features</a> |
+  <a href="#screenshots">Screenshots</a> |
   <a href="#architecture">Architecture</a> |
   <a href="#quick-start">Quick Start</a> |
   <a href="#safety">Safety</a> |
@@ -55,6 +56,16 @@ advice, a profit guarantee, or a plug-and-play money machine.
 | Persistence | SQLite repositories for signals, orders, positions, settings, and analytics. |
 | Notifications | Telegram notification support for system and trade events. |
 | Public safety | `.env.example` templates, tracked-file secret scanning, ignored local secrets, and paper mode defaults. |
+
+## Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/hinto-desktop-chart.png" alt="Hinto desktop chart with signal panel" width="100%" />
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/hinto-mobile-chart.png" alt="Hinto mobile chart layout" width="320" />
+</p>
 
 ## Architecture
 
