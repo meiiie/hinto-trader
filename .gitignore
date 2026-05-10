@@ -1,0 +1,152 @@
+# General
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+*.log
+*.tmp
+*.bak
+
+# Environment
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# Python / Backend
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
+.venv/
+venv/
+venv_linux/
+ENV/
+env/
+
+# Testing & Quality
+.coverage
+.tox/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+htmlcov/
+
+# Local AI/IDE/private planning artifacts
+AGENTS.md
+.Codex/
+.agent/
+.claude/
+.kiro/
+
+# Type Checking
+.mypy_cache/
+.dmypy.json
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+backend/data/cache/**/*.parquet
+backend/data/cache/metadata.json
+backend/data/cache/volume_rankings/
+backend/data/cache_fresh/
+backend/data/live/
+backend/backend/data/
+backend/data/exchange_filters.json
+backend/data/market_intelligence.json
+data/cache/volume_rankings/
+portfolio_backtest_*.csv
+backend/portfolio_backtest_*.csv
+run_bt.bat
+
+# Temp output files
+*_output.txt
+live_*_raw.json
+backend/equity_curve_*.csv
+backend/router_scan_*.csv
+backend/out_test.txt
+scripts/bt_lev*x_output.txt
+
+# Old prototype (now in bro-subsoul repo)
+risk_guardian/
+
+# Separate projects
+taho-analytics/
+# Keep directory structure but ignore contents if needed, or specific logs
+documents/logs/
+backend/logs/
+
+# Frontend (Node/React)
+node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/coverage/
+
+# Tauri
+frontend/src-tauri/target/
+frontend/src-tauri/gen/
+
+# Binaries
+frontend/src-tauri/binaries/*.exe
+frontend/src-tauri/binaries/*.dll
+
+# IDEs
+.vscode/
+.idea/
+*.iml
+
+# Local/Private Configs
+*.local
+backend/config/local_*.json
+
+# Windows reserved names
+nul
+backend/nul
+
+# Large binaries
+*.apk
+
+# Office exports
+*.xlsx
+
+# Old/archived directories
+/plans/
+/documents/
+/aws/
+/src/
+frontend/thamkhao/
+scripts/archive/
+backend/scripts/archive/
+
+# Deploy keys (keep on disk, never track)
+*.pem
+
+# Windows build scripts
+build_*.bat
+deploy_backend.bat
+kill_python.bat

@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Hinto</title>
+    <style>
+        /* ============================================
+           SOTA SPLASH SCREEN - Unity 6 Inspired
+           Professional, minimal, elegant
+           Cross-platform: Desktop + Mobile
+           ============================================ */
+
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            /* SOTA: Dynamic viewport height for mobile */
+            background-color: #0a0a0a;
+            color: #ffffff;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-image: url('splash-bg.jpg');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            -webkit-app-region: drag;
+            overflow: hidden;
+            /* SOTA (Jan 2026): Safe area padding for mobile */
+            padding-top: env(safe-area-inset-top, 0px);
+            padding-bottom: env(safe-area-inset-bottom, 0px);
+        }
+
+        button,
+        .btn,
+        .config-path {
+            -webkit-app-region: no-drag;
+        }
+
+        /* Dark gradient overlay for text readability */
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom,
+                    rgba(0, 0, 0, 0.3) 0%,
+                    rgba(0, 0, 0, 0.2) 40%,
+                    rgba(0, 0, 0, 0.6) 100%);
+            z-index: 1;
+        }
+
+        /* Close button - Unity style */
+        .close-btn {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            width: 32px;
+            height: 32px;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            border-radius: 4px;
+            color: #ffffff;
+            font-size: 18px;
+            cursor: pointer;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+
+        .close-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Main content container - Bottom Left */
+        .content {
+            position: absolute;
+            bottom: 100px;
+            left: 32px;
+            z-index: 10;
+        }
+
+        /* Mobile responsive */
+        @media (max-width: 600px) {
+            .content {
+                bottom: 80px;
+                left: 20px;
+                right: 20px;
+            }
+
+            .app-name {
+                font-size: 32px !important;
+            }
+
+            .logo-badge {
+                bottom: 80px !important;
+                right: 20px !important;
+            }
+
+            .logo-badge img,
+            .logo-badge .logo-fallback {
+                width: 48px !important;
+                height: 48px !important;
+            }
+        }
+
+        /* App name - Unity style big bold text */
+        .app-name {
+            font-size: 48px;
+            font-weight: 700;
+            letter-spacing: -1px;
+            margin-bottom: 16px;
+            text-shadow: 0 2px 20px rgba(0, 0, 0, 0.5);
+            color: #ffffff;
+        }
+
+        /* Version and copyright */
+        .version-info {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 4px;
+            font-weight: 400;
+        }
+
+        .copyright {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.5);
+            margin-bottom: 16px;
+        }
+
+        /* Status section */
+        .status-section {
+            margin-top: 20px;
+        }
+
+        .project-name {
+            font-size: 14px;
+            font-weight: 500;
+            color: #ffffff;
+            margin-bottom: 4px;
+        }
+
+        .status-text {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        /* Logo badge - bottom right */
+        .logo-badge {
+            position: absolute;
+            bottom: 100px;
+            right: 32px;
+            z-index: 10;
+        }
+
+        .logo-badge img {
+            width: 64px;
+            height: 64px;
+            opacity: 0.9;
+        }
+
+        .logo-badge .logo-fallback {
+            width: 64px;
+            height: 64px;
+            background: linear-gradient(135deg, #1a1a1a 0%, #333333 100%);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            font-weight: 700;
+            color: #ffffff;
+        }
+
+        /* Progress bar - Unity style bottom edge */
+        .progress-container {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            z-index: 10;
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #0ECB81, #00D68F);
+            transition: width 0.3s ease;
+        }
+
+        /* Indeterminate loading animation */
+        .progress-bar.loading {
+            width: 30%;
+            animation: loading 2s ease-in-out infinite;
+        }
+
+        @keyframes loading {
+            0% {
+                transform: translateX(-100%);
+            }
+
+            50% {
+                transform: translateX(200%);
+            }
+
+            100% {
+                transform: translateX(-100%);
+            }
+        }
+
+        /* Error state */
+        .error-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 50;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .error-overlay.visible {
+            display: flex;
+        }
+
+        .error-card {
+            background: rgba(22, 26, 31, 0.95);
+            border: 1px solid rgba(246, 70, 93, 0.3);
+            border-radius: 12px;
+            padding: 32px;
+            max-width: 420px;
+            text-align: left;
+        }
+
+        .error-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #F6465D;
+            margin-bottom: 12px;
+        }
+
+        .error-message {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.8);
+            line-height: 1.6;
+            margin-bottom: 16px;
+        }
+
+        .error-action {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.5);
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #F0B90B;
+            color: #000;
+        }
+
+        .btn-primary:hover {
+            background: #FCD535;
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="overlay"></div>
+
+    <!-- Close button -->
+    <button class="close-btn" onclick="closeApp()" title="Close">x</button>
+
+    <!-- Main content - Bottom Left -->
+    <div class="content">
+        <h1 class="app-name">Hinto</h1>
+        <div class="version-info">v4.0.0 - Trading Bot</div>
+        <div class="copyright">2026 Hinto contributors. All rights reserved.</div>
+        <div style="font-size: 12px; color: rgba(255,255,255,0.4); margin-top: 8px;">
+            Founded by Hong - Hung - Thao
+        </div>
+
+        <div class="status-section">
+            <div class="project-name">Algo Trading - Smart Execution</div>
+            <div class="status-text" id="statusText">Initializing...</div>
+        </div>
+    </div>
+
+    <!-- Logo badge - bottom right -->
+    <div class="logo-badge">
+        <img src="logo.png" alt="Hinto"
+            onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        <div class="logo-fallback" style="display: none;">W</div>
+    </div>
+
+    <!-- Progress bar - bottom edge -->
+    <div class="progress-container">
+        <div class="progress-bar loading" id="progressBar"></div>
+    </div>
+
+    <!-- Error overlay -->
+    <div class="error-overlay" id="errorOverlay">
+        <div class="error-card">
+            <div class="error-title" id="errorTitle">Configuration Required</div>
+            <div class="error-message" id="errorMessage">Unable to start the trading bot.</div>
+            <div class="error-action" id="errorAction">Please check your configuration.</div>
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="window.location.reload()">Retry</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // SOTA SPLASH SCREEN LOGIC
+        // EC2 Edition: Backend runs on AWS EC2 (always ready)
+        // Cross-platform: Desktop + Mobile
+        // ============================================
+
+        const statusElement = document.getElementById('statusText');
+        const progressBar = document.getElementById('progressBar');
+        const errorOverlay = document.getElementById('errorOverlay');
+        const errorTitle = document.getElementById('errorTitle');
+        const errorMessage = document.getElementById('errorMessage');
+        const errorAction = document.getElementById('errorAction');
+
+        // ==========================================
+        // HELPER FUNCTIONS
+        // ==========================================
+
+        function updateProgress(percent, message) {
+            if (progressBar) {
+                progressBar.style.width = percent + '%';
+                if (progressBar.classList.contains('loading')) {
+                    progressBar.classList.remove('loading');
+                }
+            }
+            if (statusElement && message) {
+                statusElement.innerText = message;
+            }
+        }
+
+        function showError(title, msg, action) {
+            if (errorOverlay) {
+                errorOverlay.classList.add('visible');
+                if (errorTitle) errorTitle.innerText = title;
+                if (errorMessage) errorMessage.innerText = msg;
+                if (errorAction) errorAction.innerText = action || 'Vui long khoi dong lai ung dung.';
+            }
+        }
+
+        function closeApp() {
+            if (window.__TAURI__) {
+                window.__TAURI__.core.invoke('quit_app');
+            } else {
+                window.close();
+            }
+        }
+
+        // ==========================================
+        // MAIN STARTUP LOGIC (EC2 Edition)
+        // Backend is always running on EC2, no need to poll localhost
+        // Just show branding splash for 2.5s then proceed
+        // ==========================================
+
+        async function initStartup() {
+            console.log('[SPLASH] EC2 Edition - Backend always ready on AWS');
+
+            // ==========================================
+            // EC2 EDITION: Backend runs 24/7 on AWS EC2
+            // No need to poll localhost sidecar
+            // Just show smooth branding animation ~2.5s
+            // ==========================================
+
+            // Step 1: Initial progress
+            updateProgress(15, 'Khoi dong...');
+            await new Promise(r => setTimeout(r, 500));
+
+            // Step 2: Connecting to EC2
+            updateProgress(40, 'Ket noi EC2 server...');
+            await new Promise(r => setTimeout(r, 700));
+
+            // Step 3: Loading config
+            updateProgress(65, 'Tai cau hinh...');
+            await new Promise(r => setTimeout(r, 600));
+
+            // Step 4: Almost ready
+            updateProgress(85, 'Chuan bi giao dien...');
+            await new Promise(r => setTimeout(r, 500));
+
+            // Step 5: Complete
+            updateProgress(100, 'San sang!');
+            await new Promise(r => setTimeout(r, 300));
+
+            // Route to main app
+            // SOTA (Jan 2026): Platform-specific navigation
+            // - Desktop: Use start_routing (manages splash/main windows)
+            // - Mobile: Navigate directly (single-window architecture)
+
+            const isMobile = /Android|webOS|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+            if (isMobile) {
+                // Mobile: Direct navigation (Tauri Mobile has single-window)
+                console.log('[SPLASH] Mobile detected - navigating to main app');
+                window.location.href = '/';
+            } else if (window.__TAURI__) {
+                // Desktop: Use Tauri window management
+                try {
+                    console.log('[SPLASH] Desktop - calling start_routing...');
+                    await window.__TAURI__.core.invoke('start_routing');
+                } catch (e) {
+                    console.error('[SPLASH] start_routing failed:', e);
+                    // Fallback: navigate directly
+                    window.location.href = '/';
+                }
+            } else {
+                // Dev mode: navigate directly
+                window.location.href = '/';
+            }
+        }
+
+        // Start on load
+        window.addEventListener('load', () => {
+            initStartup();
+        });
+    </script>
+</body>
+
+</html>

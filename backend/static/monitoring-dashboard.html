@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Trading Monitor - Shark Tank Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0a0e27;
+            color: #e0e0e0;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
+        }
+
+        .header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .connection-status {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+
+        .connection-status.connected {
+            background: #10b981;
+            color: white;
+        }
+
+        .connection-status.disconnected {
+            background: #ef4444;
+            color: white;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: #1a1f3a;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+
+        .card-title {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .badge {
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.85em;
+            font-weight: bold;
+        }
+
+        .badge-success {
+            background: #10b981;
+            color: white;
+        }
+
+        .badge-warning {
+            background: #f59e0b;
+            color: white;
+        }
+
+        .badge-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .badge-info {
+            background: #3b82f6;
+            color: white;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #2d3748;
+        }
+
+        th {
+            background: #2d3748;
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        tr:hover {
+            background: #2d3748;
+        }
+
+        .positive {
+            color: #10b981;
+        }
+
+        .negative {
+            color: #ef4444;
+        }
+
+        .neutral {
+            color: #94a3b8;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #2d3748;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s ease;
+        }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+
+        .metric {
+            background: #2d3748;
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .metric-label {
+            font-size: 0.85em;
+            color: #94a3b8;
+            margin-bottom: 5px;
+        }
+
+        .metric-value {
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+
+        .events-log {
+            max-height: 400px;
+            overflow-y: auto;
+            background: #1a1f3a;
+            border-radius: 10px;
+            padding: 20px;
+        }
+
+        .event-item {
+            padding: 10px;
+            margin-bottom: 10px;
+            background: #2d3748;
+            border-left: 4px solid #667eea;
+            border-radius: 5px;
+        }
+
+        .event-time {
+            font-size: 0.85em;
+            color: #94a3b8;
+        }
+
+        .event-type {
+            font-weight: bold;
+            color: #667eea;
+            margin: 5px 0;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #94a3b8;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .loading {
+            animation: pulse 2s infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🦈 Live Trading Monitor - Shark Tank Dashboard</h1>
+        <div class="connection-status disconnected" id="connectionStatus">
+            ⚠️ Đang kết nối...
+        </div>
+    </div>
+
+    <div class="dashboard-grid">
+        <!-- System Health -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">💰 System Health</div>
+            </div>
+            <div class="metric-grid" id="systemHealth">
+                <div class="metric">
+                    <div class="metric-label">Balance</div>
+                    <div class="metric-value">$0.00</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Available</div>
+                    <div class="metric-value">$0.00</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Open Positions</div>
+                    <div class="metric-value">0 / 5</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Pending Orders</div>
+                    <div class="metric-value">0</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Shark Tank -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">🦈 Shark Tank</div>
+                <span class="badge badge-info" id="sharkTankCount">0 signals</span>
+            </div>
+            <div id="sharkTankContent">
+                <div class="empty-state">Chưa có signals</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pending Orders -->
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">⏳ Pending Orders</div>
+            <span class="badge badge-warning" id="pendingOrdersCount">0</span>
+        </div>
+        <div id="pendingOrdersContent">
+            <div class="empty-state">Không có pending orders</div>
+        </div>
+    </div>
+
+    <!-- Open Positions -->
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">📈 Open Positions</div>
+            <span class="badge badge-success" id="positionsCount">0</span>
+        </div>
+        <div id="positionsContent">
+            <div class="empty-state">Không có positions</div>
+        </div>
+    </div>
+
+    <!-- Events Log -->
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">📋 Events Log</div>
+        </div>
+        <div class="events-log" id="eventsLog">
+            <div class="empty-state">Chưa có events</div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 10;
+
+        // Connect to WebSocket
+        function connectWebSocket() {
+            const wsUrl = 'ws://localhost:8000/api/live/ws/updates';
+
+            try {
+                ws = new WebSocket(wsUrl);
+
+                ws.onopen = () => {
+                    console.log('✅ WebSocket connected');
+                    reconnectAttempts = 0;
+                    updateConnectionStatus(true);
+
+                    // Send ping every 30 seconds
+                    setInterval(() => {
+                        if (ws && ws.readyState === WebSocket.OPEN) {
+                            ws.send('ping');
+                        }
+                    }, 30000);
+
+                    // Fetch initial data
+                    fetchAllData();
+                };
+
+                ws.onmessage = (event) => {
+                    const message = JSON.parse(event.data);
+                    handleWebSocketMessage(message);
+                };
+
+                ws.onerror = (error) => {
+                    console.error('❌ WebSocket error:', error);
+                };
+
+                ws.onclose = () => {
+                    console.log('⚠️ WebSocket disconnected');
+                    updateConnectionStatus(false);
+
+                    // Attempt reconnect
+                    if (reconnectAttempts < maxReconnectAttempts) {
+                        reconnectAttempts++;
+                        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+                        console.log(`🔄 Reconnecting in ${delay/1000}s (attempt ${reconnectAttempts}/${maxReconnectAttempts})`);
+                        setTimeout(connectWebSocket, delay);
+                    }
+                };
+            } catch (error) {
+                console.error('❌ Failed to create WebSocket:', error);
+            }
+        }
+
+        // Handle WebSocket messages
+        function handleWebSocketMessage(message) {
+            const { type, data } = message;
+
+            switch (type) {
+                case 'connected':
+                    console.log('✅ Connected:', data.message);
+                    break;
+                case 'shark_tank_update':
+                    updateSharkTank(data);
+                    break;
+                case 'pending_order_update':
+                    fetchPendingOrders();
+                    break;
+                case 'position_update':
+                    fetchPositions();
+                    break;
+                case 'system_health_update':
+                    updateSystemHealth(data);
+                    break;
+                case 'event_log':
+                    addEvent(data);
+                    break;
+            }
+        }
+
+        // Update connection status
+        function updateConnectionStatus(connected) {
+            const statusEl = document.getElementById('connectionStatus');
+            if (connected) {
+                statusEl.className = 'connection-status connected';
+                statusEl.textContent = '✅ Đã kết nối';
+            } else {
+                statusEl.className = 'connection-status disconnected';
+                statusEl.textContent = '⚠️ Mất kết nối';
+            }
+        }
+
+        // Fetch all data
+        async function fetchAllData() {
+            await Promise.all([
+                fetchSystemHealth(),
+                fetchSharkTank(),
+                fetchPendingOrders(),
+                fetchPositions(),
+                fetchEvents()
+            ]);
+        }
+
+        // Fetch system health
+        async function fetchSystemHealth() {
+            try {
+                const response = await fetch('http://localhost:8000/api/live/system-health');
+                const data = await response.json();
+                updateSystemHealth(data);
+            } catch (error) {
+                console.error('Failed to fetch system health:', error);
+            }
+        }
+
+        // Update system health display
+        function updateSystemHealth(data) {
+            const container = document.getElementById('systemHealth');
+            container.innerHTML = `
+                <div class="metric">
+                    <div class="metric-label">Balance</div>
+                    <div class="metric-value">$${data.balance?.toFixed(2) || '0.00'}</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Available</div>
+                    <div class="metric-value">$${data.available_balance?.toFixed(2) || '0.00'}</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Open Positions</div>
+                    <div class="metric-value">${data.open_positions || 0} / ${data.total_slots || 5}</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Pending Orders</div>
+                    <div class="metric-value">${data.pending_orders || 0}</div>
+                </div>
+            `;
+        }
+
+        // Fetch Shark Tank
+        async function fetchSharkTank() {
+            try {
+                const response = await fetch('http://localhost:8000/api/live/shark-tank');
+                const data = await response.json();
+                updateSharkTank(data);
+            } catch (error) {
+                console.error('Failed to fetch shark tank:', error);
+            }
+        }
+
+        // Update Shark Tank display
+        function updateSharkTank(data) {
+            document.getElementById('sharkTankCount').textContent = `${data.total_signals || 0} signals`;
+
+            const container = document.getElementById('sharkTankContent');
+
+            if (!data.signals || data.signals.length === 0) {
+                container.innerHTML = '<div class="empty-state">Chưa có signals</div>';
+                return;
+            }
+
+            const html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Symbol</th>
+                            <th>Side</th>
+                            <th>Confidence</th>
+                            <th>Entry</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.signals.map(s => `
+                            <tr>
+                                <td>${s.symbol.toUpperCase()}</td>
+                                <td><span class="badge ${s.side === 'buy' ? 'badge-success' : 'badge-danger'}">${s.side.toUpperCase()}</span></td>
+                                <td>${(s.confidence * 100).toFixed(0)}%</td>
+                                <td>$${s.entry_price.toFixed(4)}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            container.innerHTML = html;
+        }
+
+        // Fetch pending orders
+        async function fetchPendingOrders() {
+            try {
+                const response = await fetch('http://localhost:8000/api/live/pending-orders');
+                const data = await response.json();
+                updatePendingOrders(data);
+            } catch (error) {
+                console.error('Failed to fetch pending orders:', error);
+            }
+        }
+
+        // Update pending orders display
+        function updatePendingOrders(data) {
+            document.getElementById('pendingOrdersCount').textContent = data.count || 0;
+
+            const container = document.getElementById('pendingOrdersContent');
+
+            if (!data.orders || data.orders.length === 0) {
+                container.innerHTML = '<div class="empty-state">Không có pending orders</div>';
+                return;
+            }
+
+            const html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Symbol</th>
+                            <th>Side</th>
+                            <th>Target</th>
+                            <th>Current</th>
+                            <th>Progress</th>
+                            <th>TTL</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.orders.map(o => `
+                            <tr>
+                                <td>${o.symbol.toUpperCase()}</td>
+                                <td><span class="badge ${o.side === 'LONG' ? 'badge-success' : 'badge-danger'}">${o.side}</span></td>
+                                <td>$${o.target_price.toFixed(4)}</td>
+                                <td>$${o.current_price.toFixed(4)}</td>
+                                <td>
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" style="width: ${o.fill_progress_pct}%"></div>
+                                    </div>
+                                </td>
+                                <td>${o.ttl_remaining_minutes.toFixed(0)}m</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            container.innerHTML = html;
+        }
+
+        // Fetch positions
+        async function fetchPositions() {
+            try {
+                const response = await fetch('http://localhost:8000/api/live/positions');
+                const data = await response.json();
+                updatePositions(data);
+            } catch (error) {
+                console.error('Failed to fetch positions:', error);
+            }
+        }
+
+        // Update positions display
+        function updatePositions(data) {
+            document.getElementById('positionsCount').textContent = data.count || 0;
+
+            const container = document.getElementById('positionsContent');
+
+            if (!data.positions || data.positions.length === 0) {
+                container.innerHTML = '<div class="empty-state">Không có positions</div>';
+                return;
+            }
+
+            const html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Symbol</th>
+                            <th>Side</th>
+                            <th>Entry</th>
+                            <th>Current</th>
+                            <th>P&L</th>
+                            <th>P&L %</th>
+                            <th>SL</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.positions.map(p => `
+                            <tr>
+                                <td>${p.symbol.toUpperCase()}</td>
+                                <td><span class="badge ${p.side === 'LONG' ? 'badge-success' : 'badge-danger'}">${p.side}</span></td>
+                                <td>$${p.entry_price.toFixed(4)}</td>
+                                <td>$${p.current_price.toFixed(4)}</td>
+                                <td class="${p.pnl >= 0 ? 'positive' : 'negative'}">$${p.pnl.toFixed(2)}</td>
+                                <td class="${p.pnl_pct >= 0 ? 'positive' : 'negative'}">${p.pnl_pct.toFixed(2)}%</td>
+                                <td>$${p.stop_loss.toFixed(4)}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            container.innerHTML = html;
+        }
+
+        // Fetch events
+        async function fetchEvents() {
+            try {
+                const response = await fetch('http://localhost:8000/api/live/events?limit=50');
+                const data = await response.json();
+
+                const container = document.getElementById('eventsLog');
+                if (!data.events || data.events.length === 0) {
+                    container.innerHTML = '<div class="empty-state">Chưa có events</div>';
+                    return;
+                }
+
+                container.innerHTML = data.events.reverse().map(e => `
+                    <div class="event-item">
+                        <div class="event-time">${new Date(e.timestamp).toLocaleString('vi-VN')}</div>
+                        <div class="event-type">${e.type}</div>
+                        <div>${JSON.stringify(e.data, null, 2)}</div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to fetch events:', error);
+            }
+        }
+
+        // Add event to log
+        function addEvent(event) {
+            const container = document.getElementById('eventsLog');
+
+            // Remove empty state if exists
+            const emptyState = container.querySelector('.empty-state');
+            if (emptyState) {
+                emptyState.remove();
+            }
+
+            const eventHtml = `
+                <div class="event-item">
+                    <div class="event-time">${new Date(event.timestamp).toLocaleString('vi-VN')}</div>
+                    <div class="event-type">${event.type}</div>
+                    <div>${JSON.stringify(event.data, null, 2)}</div>
+                </div>
+            `;
+
+            container.insertAdjacentHTML('afterbegin', eventHtml);
+
+            // Keep only last 50 events
+            const events = container.querySelectorAll('.event-item');
+            if (events.length > 50) {
+                events[events.length - 1].remove();
+            }
+        }
+
+        // Initialize
+        connectWebSocket();
+
+        // Refresh data every 5 seconds
+        setInterval(fetchAllData, 5000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connection Test - Hinto Stock</title>
+    <style>
+        body {
+            font-family: -apple-system, system-ui, sans-serif;
+            padding: 20px;
+            background: #09090b;
+            color: #fff;
+        }
+
+        .card {
+            background: #18191c;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            border: 1px solid #2B3139;
+        }
+
+        h2 {
+            margin-top: 0;
+            color: #F0B90B;
+            font-size: 18px;
+        }
+
+        .status {
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        .success {
+            color: #10B981;
+        }
+
+        .error {
+            color: #EF4444;
+        }
+
+        .warning {
+            color: #F59E0B;
+        }
+
+        pre {
+            background: #000;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+            font-family: 'Courier New', monospace;
+        }
+
+        button {
+            padding: 10px 20px;
+            background: #2962FF;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            width: 100%;
+            font-size: 16px;
+            margin-bottom: 16px;
+        }
+
+        .info {
+            color: #848E9C;
+            font-size: 13px;
+            margin-bottom: 4px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>📡 Connection Test</h1>
+    <div class="info">Frontend Origin: <span id="origin-display">...</span></div>
+
+    <button onclick="runTests()">RUN DIAGNOSTICS</button>
+
+    <div class="card">
+        <h2>1. REST API Test</h2>
+        <div class="info">Target: <span id="api-target">...</span></div>
+        <div id="api-status" class="status">Waiting...</div>
+        <pre id="api-result">Click Run Diagnostics</pre>
+    </div>
+
+    <div class="card">
+        <h2>2. WebSocket Test</h2>
+        <div class="info">Target: <span id="ws-target">...</span></div>
+        <div id="ws-status" class="status">Waiting...</div>
+        <pre id="ws-result">Click Run Diagnostics</pre>
+    </div>
+
+    <div class="card">
+        <h2>3. Browser Info</h2>
+        <pre id="browser-info"></pre>
+    </div>
+
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const EC2_HOST = params.get('host') || window.location.hostname || '127.0.0.1';
+        const API_URL = `http://${EC2_HOST}:8000/system/status`;
+        const WS_URL = `ws://${EC2_HOST}:8000/ws/stream/btcusdt`;
+
+        document.getElementById('origin-display').textContent = window.location.origin;
+        document.getElementById('api-target').textContent = API_URL;
+        document.getElementById('ws-target').textContent = WS_URL;
+
+        document.getElementById('browser-info').textContent = JSON.stringify({
+            userAgent: navigator.userAgent,
+            onLine: navigator.onLine,
+            location: window.location.href
+        }, null, 2);
+
+        async function runTests() {
+            // Reset
+            document.querySelectorAll('.status').forEach(el => el.className = 'status');
+
+            // 1. API Test
+            const apiStatus = document.getElementById('api-status');
+            const apiResult = document.getElementById('api-result');
+            apiStatus.textContent = 'Connecting...';
+            apiResult.textContent = 'Fetching...';
+
+            try {
+                const start = Date.now();
+                const response = await fetch(API_URL, {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' }
+                });
+                const duration = Date.now() - start;
+
+                if (response.ok) {
+                    const data = await response.json();
+                    apiStatus.textContent = `✅ SUCCESS (${duration}ms)`;
+                    apiStatus.classList.add('success');
+                    apiResult.textContent = JSON.stringify(data, null, 2);
+                } else {
+                    apiStatus.textContent = `❌ FAILED (Status: ${response.status})`;
+                    apiStatus.classList.add('error');
+                    apiResult.textContent = `Status: ${response.status} ${response.statusText}`;
+                }
+            } catch (error) {
+                apiStatus.textContent = '❌ NETWORK/CORS ERROR';
+                apiStatus.classList.add('error');
+                apiResult.textContent = `${error.name}: ${error.message}\n\nPOSSIBLE CAUSES:\n1. CORS blocked (Origin not allowed)\n2. Mixed Content (HTTPS vs HTTP)\n3. IP blocked/unreachable`;
+            }
+
+            // 2. WebSocket Test
+            const wsStatus = document.getElementById('ws-status');
+            const wsResult = document.getElementById('ws-result');
+            wsStatus.textContent = 'Connecting...';
+            wsResult.textContent = 'Opening socket...';
+
+            try {
+                const ws = new WebSocket(WS_URL);
+
+                ws.onopen = () => {
+                    wsStatus.textContent = '✅ CONNECTED';
+                    wsStatus.classList.add('success');
+                    wsResult.textContent = 'WebSocket connection established!\nWaiting for message...';
+                };
+
+                ws.onmessage = (event) => {
+                    wsResult.textContent = `✅ Message Received:\n${event.data.substring(0, 100)}...`;
+                    ws.close();
+                };
+
+                ws.onerror = (error) => {
+                    wsStatus.textContent = '❌ ERROR';
+                    wsStatus.classList.add('error');
+                    wsResult.textContent = 'WebSocket connection failed.\nCheck console for details.';
+                };
+            } catch (e) {
+                wsStatus.textContent = '❌ EXCEPTION';
+                wsStatus.classList.add('error');
+                wsResult.textContent = e.message;
+            }
+        }
+    </script>
+</body>
+
+</html>

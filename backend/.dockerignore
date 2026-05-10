@@ -1,0 +1,33 @@
+__pycache__
+*.py[cod]
+*$py.class
+venv/
+.venv/
+.env
+.git/
+.gitignore
+*.log
+
+# Heavy files - exclude from Docker build
+data/
+tests/
+*.csv
+*.parquet
+*.md
+*.txt
+!requirements.txt
+docs/
+documents/
+scripts/
+*.bat
+*.ps1
+*.sh
+
+# Frontend - not needed in backend Docker
+frontend/
+node_modules/
+
+# IDE/Tools
+.vscode/
+.idea/
+*.pyc

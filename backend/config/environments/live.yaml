@@ -1,0 +1,27 @@
+# PRODUCTION Configuration - REAL MONEY!
+# ⚠️ WARNING: This file should be .gitignored
+
+environment:
+  name: live
+  description: "Production trading - REAL MONEY"
+
+api:
+  base_url: "https://fapi.binance.com"
+  ws_url: "wss://fstream.binance.com"
+  # Keys loaded from env vars:
+  # - BINANCE_API_KEY
+  # - BINANCE_API_SECRET
+
+trading:
+  risk_per_trade: 0.005     # 0.5% risk (conservative)
+  max_positions: 3          # Fewer positions for safety
+  max_leverage: 5           # Lower leverage for safety
+
+safety:
+  enable_trading_on_startup: false  # ALWAYS require explicit enable
+  require_confirmation: true        # Require confirmation for orders
+  max_order_value: 1000.0           # Start small
+
+database:
+  # Auto-set by settings.py based on env
+  # Path: data/live/trading_system.db

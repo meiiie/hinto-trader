@@ -1,0 +1,254 @@
+@import "tailwindcss";
+
+/* Custom theme for Tailwind v4 - Binance Pro Dark Theme */
+@theme {
+  /* Typography */
+  --font-mono: "JetBrains Mono", "Roboto Mono", ui-monospace, monospace;
+  --font-sans: "Inter", system-ui, sans-serif;
+
+  /* Trading Colors - Softer than pure red/green per expert feedback */
+  --color-trading-up: #0ECB81;
+  --color-trading-down: #F6465D;
+  --color-trading-yellow: #F0B90B;
+
+  /* Rose/Emerald alternatives (softer, less eye strain) */
+  --color-bull: #10B981;
+  /* emerald-500 */
+  --color-bear: #F43F5E;
+  /* rose-500 */
+
+  /* Background hierarchy (darker sidebar creates depth) */
+  --color-bg-primary: #0B0E11;
+  --color-bg-card: #1E2329;
+  --color-bg-sidebar: #09090b;
+  /* zinc-950 - darker than card */
+  --color-bg-elevated: #0D1117;
+
+  /* Border & Lines */
+  --color-border: #2B3139;
+  --color-border-subtle: rgba(43, 49, 57, 0.5);
+
+  /* Text hierarchy */
+  --color-text-primary: #EAECEF;
+  --color-text-secondary: #848E9C;
+  --color-text-muted: #5E6673;
+
+  /* Indicator colors */
+  --color-vwap: #F0B90B;
+  --color-bollinger: #2962FF;
+
+  /* Spacing tokens */
+  --spacing-sidebar: 20rem;
+  /* w-80 = 320px */
+}
+
+:root {
+  font-family: var(--font-sans), system-ui, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color-scheme: dark;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* Safe Area Insets for Mobile (notch, navigation bar) */
+  --sat: env(safe-area-inset-top, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background-color: #09090b;
+  color: #e4e4e7;
+  /* SOTA (Jan 2026): Safe area handled by MobileLayout.tsx */
+  /* Only add side padding for landscape mode edge cases */
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+ol {
+  list-style: none;
+}
+
+#root {
+  isolation: isolate;
+  background-color: var(--color-bg);
+  min-height: 100vh;
+  min-height: 100dvh;
+  /* SOTA Mobile: Handle notch/status bar area */
+  padding-top: env(safe-area-inset-top);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
+  /* Dynamic viewport height for mobile */
+  width: 100%;
+}
+
+/* Scrollbar styling - Thin & subtle */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #52525b;
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+
+/* Animation */
+@keyframes pulse {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Glow effects for indicators */
+@keyframes glow-green {
+
+  0%,
+  100% {
+    box-shadow: 0 0 5px var(--color-bull);
+  }
+
+  50% {
+    box-shadow: 0 0 15px var(--color-bull);
+  }
+}
+
+@keyframes glow-red {
+
+  0%,
+  100% {
+    box-shadow: 0 0 5px var(--color-bear);
+  }
+
+  50% {
+    box-shadow: 0 0 15px var(--color-bear);
+  }
+}
+
+/* Utility classes for trading UI */
+.text-bull {
+  color: var(--color-bull);
+}
+
+.text-bear {
+  color: var(--color-bear);
+}
+
+.bg-bull {
+  background-color: var(--color-bull);
+}
+
+.bg-bear {
+  background-color: var(--color-bear);
+}
+
+.bg-bull-subtle {
+  background-color: rgba(16, 185, 129, 0.1);
+}
+
+.bg-bear-subtle {
+  background-color: rgba(244, 63, 94, 0.1);
+}
+
+.border-bull {
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.border-bear {
+  border-color: rgba(244, 63, 94, 0.3);
+}
+
+/* Progress bar glow */
+.progress-glow-yellow {
+  box-shadow: 0 0 10px rgba(240, 185, 11, 0.5);
+}
+
+.progress-glow-green {
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+}
+
+.progress-glow-red {
+  box-shadow: 0 0 10px rgba(244, 63, 94, 0.5);
+}
+
+
+/* Sidebar specific scrollbar - thinner */
+.sidebar-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background: rgba(43, 49, 57, 0.6);
+  border-radius: 2px;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(43, 49, 57, 0.9);
+}
+
+/* Log item hover effect */
+.log-item-hover:hover {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+/* Badge styles */
+.badge-bull {
+  background-color: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  color: #10B981;
+}
+
+.badge-bear {
+  background-color: rgba(244, 63, 94, 0.1);
+  border: 1px solid rgba(244, 63, 94, 0.2);
+  color: #F43F5E;
+}
+
+.badge-neutral {
+  background-color: rgba(94, 102, 115, 0.1);
+  border: 1px solid rgba(94, 102, 115, 0.2);
+  color: #5E6673;
+}
+
+/* Backdrop blur for sticky headers */
+.header-blur {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}

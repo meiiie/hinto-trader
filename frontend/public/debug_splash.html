@@ -1,0 +1,128 @@
+<!--
+Debug Splash - Test if fetch works in Tauri WebView
+Place this file in frontend/public/ and test by loading splash.html
+-->
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Debug Test</title>
+    <style>
+        body {
+            background: #1a1a2e;
+            color: #eee;
+            font-family: monospace;
+            padding: 20px;
+        }
+
+        pre {
+            background: #0d0d1a;
+            padding: 15px;
+            border-radius: 8px;
+            overflow: auto;
+        }
+
+        .success {
+            color: #4ade80;
+        }
+
+        .error {
+            color: #f87171;
+        }
+
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>🔍 Splash Debug Test</h1>
+
+    <h2>1. Environment Check</h2>
+    <pre id="env"></pre>
+
+    <h2>2. Fetch Test</h2>
+    <button onclick="testFetch()">Test fetch(localhost:8000/health)</button>
+    <pre id="fetch-result">Click button to test...</pre>
+
+    <h2>3. Tauri API Check</h2>
+    <pre id="tauri"></pre>
+
+    <h2>4. Invoke Test</h2>
+    <button onclick="testInvoke()">Test invoke('show_setup')</button>
+    <pre id="invoke-result">Click button to test...</pre>
+
+    <script>
+        // 1. Environment
+        document.getElementById('env').textContent = `
+Location: ${window.location.href}
+UserAgent: ${navigator.userAgent}
+Protocol: ${window.location.protocol}
+        `.trim();
+
+        // 2. Fetch test
+        async function testFetch() {
+            const resultEl = document.getElementById('fetch-result');
+            resultEl.textContent = 'Fetching...';
+
+            try {
+                const start = Date.now();
+                const response = await fetch('http://localhost:8000/health', {
+                    signal: AbortSignal.timeout(5000)
+                });
+                const elapsed = Date.now() - start;
+
+                if (response.ok) {
+                    const data = await response.json();
+                    resultEl.className = 'success';
+                    resultEl.textContent = `✅ SUCCESS (${elapsed}ms)\n\n${JSON.stringify(data, null, 2)}`;
+                } else {
+                    resultEl.className = 'error';
+                    resultEl.textContent = `❌ HTTP ${response.status}: ${response.statusText}`;
+                }
+            } catch (e) {
+                resultEl.className = 'error';
+                resultEl.textContent = `❌ FAILED: ${e.name}: ${e.message}`;
+            }
+        }
+
+        // 3. Tauri check
+        const tauriEl = document.getElementById('tauri');
+        if (window.__TAURI__) {
+            tauriEl.className = 'success';
+            tauriEl.textContent = `✅ window.__TAURI__ available!\nKeys: ${Object.keys(window.__TAURI__).join(', ')}`;
+        } else {
+            tauriEl.className = 'error';
+            tauriEl.textContent = `❌ window.__TAURI__ is UNDEFINED!\nThis means Tauri APIs are not injected into this WebView.`;
+        }
+
+        // 4. Invoke test
+        async function testInvoke() {
+            const resultEl = document.getElementById('invoke-result');
+
+            if (!window.__TAURI__) {
+                resultEl.className = 'error';
+                resultEl.textContent = '❌ Cannot test - __TAURI__ not available';
+                return;
+            }
+
+            try {
+                resultEl.textContent = 'Invoking show_setup...';
+                await window.__TAURI__.core.invoke('show_setup');
+                resultEl.className = 'success';
+                resultEl.textContent = '✅ invoke("show_setup") succeeded!';
+            } catch (e) {
+                resultEl.className = 'error';
+                resultEl.textContent = `❌ Invoke failed: ${e}`;
+            }
+        }
+
+        // Auto-run fetch test after 1 second
+        setTimeout(testFetch, 1000);
+    </script>
+</body>
+
+</html>

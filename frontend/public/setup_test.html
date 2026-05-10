@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Setup Test</title>
+    <style>
+        body {
+            background: #0B0E11;
+            color: #EAECEF;
+            font-family: system-ui, sans-serif;
+            padding: 40px;
+            text-align: center;
+        }
+
+        h1 {
+            color: #F0B90B;
+        }
+
+        button {
+            background: #F0B90B;
+            color: #0B0E11;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px;
+            border-radius: 8px;
+        }
+
+        pre {
+            background: #1E2329;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: left;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>🧪 Setup Test - Minimal</h1>
+
+    <p>If you see this, the WebView is working!</p>
+
+    <h2>Tauri API Status:</h2>
+    <pre id="tauri-status">Checking...</pre>
+
+    <button onclick="testClose()">Close Setup (invoke close_setup)</button>
+    <button onclick="testAlert()">Test Alert</button>
+
+    <script>
+        // Check Tauri availability
+        const statusEl = document.getElementById('tauri-status');
+
+        if (window.__TAURI__) {
+            statusEl.innerHTML = `✅ window.__TAURI__ available!\n\nKeys: ${Object.keys(window.__TAURI__).join(', ')}`;
+            statusEl.style.color = '#0ECB81';
+        } else {
+            statusEl.innerHTML = '❌ window.__TAURI__ is UNDEFINED';
+            statusEl.style.color = '#F6465D';
+        }
+
+        function testClose() {
+            if (window.__TAURI__) {
+                window.__TAURI__.core.invoke('close_setup');
+            } else {
+                alert('Tauri not available');
+            }
+        }
+
+        function testAlert() {
+            alert('Alert works!');
+        }
+
+        console.log('[SETUP TEST] Page loaded successfully');
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,27 @@
+# Binance Testnet Configuration
+# Uses demo money on testnet.binancefuture.com
+
+environment:
+  name: testnet
+  description: "Binance Futures Testnet - Demo trading"
+
+api:
+  base_url: "https://testnet.binancefuture.com"
+  ws_url: "wss://stream.binancefuture.com"
+  # Keys loaded from env vars:
+  # - BINANCE_TESTNET_API_KEY
+  # - BINANCE_TESTNET_API_SECRET
+
+trading:
+  risk_per_trade: 0.01      # 1% risk per trade
+  max_positions: 5
+  max_leverage: 10
+
+safety:
+  enable_trading_on_startup: false  # Require explicit enable
+  require_confirmation: false
+  max_order_value: 10000.0  # Cap for testnet
+
+database:
+  # Auto-set by settings.py based on env
+  # Path: data/testnet/trading_system.db

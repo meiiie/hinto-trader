@@ -1,0 +1,21 @@
+# Paper Trading Configuration
+# Safe for development and testing - No real money
+
+environment:
+  name: paper
+  description: "Paper trading with simulated balance"
+
+trading:
+  risk_per_trade: 0.01      # 1% risk per trade
+  max_positions: 5
+  max_leverage: 10
+  initial_balance: 10000.0  # Paper money
+
+safety:
+  enable_trading_on_startup: true  # Safe for paper
+  require_confirmation: false
+  max_order_value: 50000.0
+
+database:
+  # Auto-set by settings.py based on env
+  # Path: data/paper/trading_system.db

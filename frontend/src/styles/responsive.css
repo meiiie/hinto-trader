@@ -1,0 +1,137 @@
+/**
+ * Responsive CSS Classes - SOTA 2025
+ * CSS Media Queries for layout switching
+ *
+ * IMPORTANT: CSS processed by browser BEFORE JavaScript
+ * This prevents hydration mismatch and layout shift
+ *
+ * Breakpoints (Binance-style):
+ * - Mobile: 0 - 767px
+ * - Tablet: 768px - 1023px
+ * - Desktop: 1024px+
+ */
+
+/* ============================================
+   MOBILE-FIRST RESPONSIVE CLASSES
+   ============================================ */
+
+/* Show only on mobile (< 768px) */
+.mobile-only {
+    display: block;
+}
+
+.mobile-only-flex {
+    display: flex;
+}
+
+/* Show only on desktop (>= 768px) */
+.desktop-only {
+    display: none;
+}
+
+.desktop-only-flex {
+    display: none;
+}
+
+/* Tablet media query (768px - 1023px) */
+@media (min-width: 768px) {
+    .mobile-only {
+        display: none !important;
+    }
+
+    .mobile-only-flex {
+        display: none !important;
+    }
+
+    .desktop-only {
+        display: block;
+    }
+
+    .desktop-only-flex {
+        display: flex;
+    }
+}
+
+/* Desktop media query (>= 1024px) */
+@media (min-width: 1024px) {
+    .desktop-only {
+        display: block;
+    }
+
+    .desktop-only-flex {
+        display: flex;
+    }
+}
+
+/* ============================================
+   LAYOUT UTILITIES
+   ============================================ */
+
+/* Safe area support for mobile notch/navigation bar */
+.safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.safe-area-top {
+    padding-top: env(safe-area-inset-top, 0);
+}
+
+/* Mobile viewport height (100dvh for dynamic viewport) */
+.mobile-viewport-height {
+    height: 100vh;
+    height: 100dvh;
+}
+
+/* Touch target minimum 44px */
+.touch-target {
+    min-width: 44px;
+    min-height: 44px;
+}
+
+/* ============================================
+   MOBILE LAYOUT SPECIFIC
+   ============================================ */
+
+/* Mobile chart container - full width, no sidebar */
+.mobile-chart-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* Mobile bottom nav padding */
+.mobile-content-with-nav {
+    padding-bottom: 56px;
+}
+
+/* ============================================
+   DESKTOP LAYOUT SPECIFIC
+   ============================================ */
+
+/* Desktop trading layout - chart + sidebar */
+.desktop-trading-layout {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* Desktop sidebar */
+.desktop-sidebar {
+    width: 320px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Desktop chart area */
+.desktop-chart-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+}

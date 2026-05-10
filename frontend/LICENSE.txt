@@ -1,0 +1,9 @@
+Hinto is distributed under the MIT License.
+
+See the repository root LICENSE file for the full license text.
+
+Trading Risk Notice:
+This software is provided for research and automation. Crypto futures trading
+is high risk and can result in substantial financial loss. The contributors do
+not provide financial advice and are not responsible for losses caused by use,
+misconfiguration, exchange behavior, network failure, or strategy performance.
