@@ -526,6 +526,54 @@ async def _background_heavy_init(app: FastAPI):
             logger.error(f"[BACKGROUND] SharedClient connect failed: {e}")
             await monitor.emit_progress(85, 100, "WebSocket Connection Failed", level="error")
 
+        # Step 6.5: REST market-data fallback for paper-real/local networks.
+        # Some local networks allow Binance REST but block WebSocket. Keep paper
+        # execution realistic by polling live candles and using the same service
+        # update path as the WebSocket feed when data is stale.
+        async def rest_market_poll_loop():
+            from datetime import datetime
+
+            while True:
+                try:
+                    await asyncio.sleep(30.0)
+                    should_poll = not shared_client.is_connected
+
+                    if not should_poll and services:
+                        latest = services[0].get_latest_data("1m")
+                        if latest is None:
+                            should_poll = True
+                        else:
+                            age_seconds = (datetime.now() - latest.timestamp).total_seconds()
+                            should_poll = age_seconds > 90
+
+                    if not should_poll:
+                        continue
+
+                    results = await asyncio.gather(
+                        *(svc.poll_rest_market_data() for svc in services),
+                        return_exceptions=True,
+                    )
+                    updated_1m = sum(
+                        r.get("updated_1m", 0)
+                        for r in results
+                        if isinstance(r, dict)
+                    )
+                    closed_15m = sum(
+                        r.get("closed_15m", 0)
+                        for r in results
+                        if isinstance(r, dict)
+                    )
+                    logger.info(
+                        "REST market fallback poll complete: "
+                        f"updated_1m={updated_1m}, closed_15m={closed_15m}"
+                    )
+                except Exception as e:
+                    logger.error(f"REST market fallback loop error: {e}")
+
+        if _env == "paper":
+            asyncio.create_task(rest_market_poll_loop())
+            logger.info("[BACKGROUND] REST market fallback loop started for paper mode")
+
         # Step 7: Start DataRetentionService
         await monitor.emit_progress(90, 100, "Starting Data Retention Service...")
         await retention_service.start()
