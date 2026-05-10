@@ -713,7 +713,8 @@ class DIContainer:
                                use_bounce_confirm: bool = False, use_ema_regime_filter: bool = False,
                                use_atr_sl: bool = False, use_funding_filter: bool = False,
                                use_delta_divergence: bool = False, use_mtf_trend: bool = False,
-                               mtf_ema_period: int = 50):
+                               mtf_ema_period: int = 50,
+                               strategy_id: Optional[str] = None):
         """
         Get SignalGenerator instance with all dependencies (singleton).
 
@@ -749,6 +750,7 @@ class DIContainer:
             use_delta_divergence,
             use_mtf_trend,
             mtf_ema_period,
+            strategy_id,
         )
 
         if cache_key not in self._instances:
@@ -804,6 +806,7 @@ class DIContainer:
                 use_delta_divergence=use_delta_divergence,
                 use_mtf_trend=use_mtf_trend,
                 mtf_ema_period=mtf_ema_period,
+                strategy_id=strategy_id,
             )
             self.logger.info(
                 f"Created SignalGenerator with SOTA config: "
@@ -814,7 +817,8 @@ class DIContainer:
                 f"htf_filter={use_htf_filter}, "
                 f"funding_filter={use_funding_filter}, "
                 f"delta_divergence={use_delta_divergence}, "
-                f"mtf_trend={use_mtf_trend}"
+                f"mtf_trend={use_mtf_trend}, "
+                f"strategy_id={strategy_id or 'default'}"
             )
 
         return self._instances[cache_key]

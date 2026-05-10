@@ -52,6 +52,28 @@ Initial hypothesis:
 - take partial profit near 1R only if needed for psychological/fee stability;
 - trail the remaining position by ATR or structure.
 
+Current implementation status:
+
+- `--strategy-id liquidity_reclaim_trend_runner` is available for research
+  backtests.
+- It rejects stops wider than `1.2%`, enters as a market-style continuation
+  signal in the simulator, and sets the first target at `3R`.
+- It tags signals with `research_exit_profile=trend_runner_3r`, disabling early
+  auto-close so the backtest can measure a different payoff shape from the
+  legacy scalper.
+- The default remains `liquidity_sniper_mean_reversion`; live behavior does not
+  change unless the operator explicitly chooses a different strategy id.
+
+Example:
+
+```bash
+python backend/run_backtest.py \
+  --strategy-id liquidity_reclaim_trend_runner \
+  --top 40 --days 30 --balance 50 --leverage 20 \
+  --max-pos 4 --no-compound --1m-monitoring --fill-buffer 0 \
+  --max-sl-validation --max-sl-pct 1.2
+```
+
 Promotion criteria:
 
 - profit factor above 1.20 even with win rate below 50%;

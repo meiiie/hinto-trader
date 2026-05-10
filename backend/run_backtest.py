@@ -45,6 +45,7 @@ from src.application.analysis.adaptive_regime_router import (
     get_router_research_exit_profile,
     get_router_recommended_symbol_side_blocks,
 )
+from src.application.signals.strategy_ids import DEFAULT_STRATEGY_ID, SUPPORTED_STRATEGY_IDS
 from src.application.analysis.trend_filter import TrendFilter
 from src.infrastructure.data.historical_data_loader import HistoricalDataLoader
 from src.config.market_mode import MarketMode, get_market_config
@@ -543,6 +544,9 @@ async def main():
                        help="[ENTRY] Swing point lookback period (candles). Default: 20")
     parser.add_argument("--sniper-proximity", type=float, default=1.5,
                        help="[ENTRY] Proximity threshold %% to swing point. Default: 1.5")
+    parser.add_argument("--strategy-id", type=str, choices=SUPPORTED_STRATEGY_IDS,
+                       default=os.getenv("HINTO_STRATEGY_ID", DEFAULT_STRATEGY_ID),
+                       help="[RESEARCH] Signal strategy: default mean-reversion sniper or positive-skew reclaim runner.")
     parser.add_argument("--volume-slippage", action="store_true",
                        help="[SOTA] Volume-adjusted slippage (Almgren-Chriss sqrt-vol model). Default: OFF")
     parser.add_argument("--1m-monitoring", action="store_true", dest="m1_monitoring",
@@ -1313,6 +1317,7 @@ async def main():
         use_delta_divergence=args.delta_divergence,
         use_mtf_trend=args.mtf_trend,
         mtf_ema_period=args.mtf_ema,
+        strategy_id=args.strategy_id,
     )
 
     # SOTA: Initialize FundingHistoryLoader for historical funding rates

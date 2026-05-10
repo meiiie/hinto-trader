@@ -24,6 +24,8 @@ from ...domain.interfaces import (
 )
 from ..services.tp_calculator import TPCalculator
 from ..services.stop_loss_calculator import StopLossCalculator
+from .strategies.trend_continuation import TrendContinuationStrategy
+from .strategy_ids import DEFAULT_STRATEGY_ID, SUPPORTED_STRATEGY_IDS, TREND_RUNNER_STRATEGY_ID
 from ...strategies.strategy_registry import StrategyRegistry, StrategyConfig
 
 
@@ -76,6 +78,7 @@ class SignalGenerator:
         use_delta_divergence: bool = False,  # Volume Delta Divergence filter
         use_mtf_trend: bool = False,  # MTF Trend filter (faster EMA on 4H)
         mtf_ema_period: int = 50,  # MTF trend EMA period on 4H (50 = ~8 days)
+        strategy_id: Optional[str] = None,
         **kwargs
     ):
         self.vwap_calculator = vwap_calculator
@@ -89,6 +92,8 @@ class SignalGenerator:
 
         self.account_size = account_size
         self.logger = logging.getLogger(__name__)
+        self.strategy_id = self._normalize_strategy_id(strategy_id)
+        self._trend_runner = TrendContinuationStrategy()
 
         # INSTITUTIONAL (Feb 2026): ADX Regime Filter
         # ADX > 25 = trending → trade normally
@@ -175,6 +180,9 @@ class SignalGenerator:
         self._is_live_mode = (self._env == "live")
         self._blocked_short_signals = 0
 
+        if self.strategy_id != DEFAULT_STRATEGY_ID:
+            self.logger.info(f"SIGNAL STRATEGY: {self.strategy_id}")
+
         if self._is_live_mode:
             self.logger.info("✅ LIVE MODE: SHORT trading ENABLED (all 3 layers disabled)")
 
@@ -239,12 +247,26 @@ class SignalGenerator:
             rate /= 100.0
         return rate
 
+    def _normalize_strategy_id(self, strategy_id: Optional[str]) -> str:
+        selected = (strategy_id or os.getenv("HINTO_STRATEGY_ID") or DEFAULT_STRATEGY_ID).strip()
+        if selected in SUPPORTED_STRATEGY_IDS:
+            return selected
+        self.logger.warning(
+            "Unknown signal strategy_id=%s; falling back to %s",
+            selected,
+            DEFAULT_STRATEGY_ID,
+        )
+        return DEFAULT_STRATEGY_ID
+
     def generate_signal(self, candles: List[Candle], symbol: str, htf_bias: str = 'NEUTRAL', **kwargs) -> Optional[TradingSignal]:
         if len(candles) < 50: return None
-        config = StrategyRegistry.get_config(symbol)
         ctx = self._prepare_market_context(candles)
 
+        if self.strategy_id == TREND_RUNNER_STRATEGY_ID:
+            return self._trend_runner.generate(ctx, symbol, htf_bias, **kwargs)
+
         # Use Limit Sniper Logic
+        config = StrategyRegistry.get_config(symbol)
         return self._strategy_liquidity_sniper(ctx, config, symbol, htf_bias, **kwargs)
 
     def _strategy_liquidity_sniper(self, ctx: MarketContext, config: StrategyConfig, symbol: str, htf_bias: str, **kwargs) -> Optional[TradingSignal]:

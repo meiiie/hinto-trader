@@ -88,6 +88,17 @@ python run_backtest.py \
   --ac-threshold-exit
 ```
 
+### Research Strategy Switch
+
+Backtests default to the production-compatible mean-reversion sniper:
+`--strategy-id liquidity_sniper_mean_reversion`.
+
+To test the positive-skew reclaim runner without changing live defaults:
+
+```bash
+python run_backtest.py --strategy-id liquidity_reclaim_trend_runner --top 40 --days 30 --no-compound --1m-monitoring
+```
+
 ## API Endpoints
 
 | Method | Endpoint | Description |
