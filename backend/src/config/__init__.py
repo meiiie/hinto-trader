@@ -40,6 +40,7 @@ from .runtime import (
     get_runtime_env,
     get_trading_db_path,
     get_trading_mode_label,
+    is_exchange_ordering_enabled,
     is_paper_real_enabled,
     is_real_ordering_enabled,
     normalize_runtime_env,

@@ -5,6 +5,7 @@ from src.config.runtime import (
     get_execution_mode,
     get_trading_db_path,
     get_trading_mode_label,
+    is_exchange_ordering_enabled,
     is_paper_real_enabled,
     is_real_ordering_enabled,
     normalize_runtime_env,
@@ -31,6 +32,12 @@ def test_trading_mode_label_uses_public_uppercase_names():
     assert get_trading_mode_label("paper") == "PAPER"
     assert get_trading_mode_label("testnet") == "TESTNET"
     assert get_trading_mode_label("live") == "LIVE"
+
+
+def test_exchange_ordering_is_disabled_only_for_paper():
+    assert is_exchange_ordering_enabled("paper") is False
+    assert is_exchange_ordering_enabled("testnet") is True
+    assert is_exchange_ordering_enabled("live") is True
 
 
 def test_trading_db_path_is_environment_scoped(tmp_path: Path):

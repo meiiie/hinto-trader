@@ -1,4 +1,13 @@
-from src.config.runtime import get_execution_mode, is_paper_real_enabled, is_real_ordering_enabled
+from datetime import datetime, timedelta, timezone
+from unittest.mock import Mock
+
+from src.config.runtime import (
+    get_execution_mode,
+    is_exchange_ordering_enabled,
+    is_paper_real_enabled,
+    is_real_ordering_enabled,
+)
+from src.application.services.local_signal_tracker import PendingSignal, SignalDirection
 from src.application.services.live_trading_service import LiveTradingService, TradingMode
 from src.domain.entities.trading_signal import TradingSignal, SignalType
 
@@ -9,6 +18,7 @@ def test_paper_real_is_default_safe_execution_profile(monkeypatch):
 
     assert get_execution_mode() == "paper_real"
     assert is_paper_real_enabled() is True
+    assert is_exchange_ordering_enabled() is False
     assert is_real_ordering_enabled() is False
 
 
@@ -18,6 +28,7 @@ def test_paper_real_can_be_disabled_for_plain_paper(monkeypatch):
 
     assert get_execution_mode() == "paper"
     assert is_paper_real_enabled() is False
+    assert is_exchange_ordering_enabled() is False
     assert is_real_ordering_enabled() is False
 
 
@@ -35,3 +46,23 @@ def test_live_service_rejects_paper_mode_execution():
 
     assert service.execute_signal(signal) is False
     assert service.client is None
+
+
+def test_triggered_signal_guard_blocks_paper_even_if_bypassed(monkeypatch):
+    monkeypatch.setenv("ENV", "paper")
+
+    service = LiveTradingService(mode=TradingMode.PAPER, enable_trading=True)
+    service.client = Mock()
+    signal = PendingSignal(
+        symbol="BTCUSDT",
+        direction=SignalDirection.LONG,
+        target_price=100.0,
+        stop_loss=98.8,
+        take_profit=102.0,
+        quantity=0.01,
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+    )
+
+    assert service.exchange_ordering_enabled is False
+    assert service._execute_triggered_signal(signal, current_price=100.0) is False
+    service.client.create_order.assert_not_called()

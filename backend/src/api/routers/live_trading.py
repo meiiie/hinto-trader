@@ -14,6 +14,12 @@ from typing import Optional, List
 import os
 import logging
 
+from src.config.runtime import (
+    get_execution_mode,
+    get_runtime_env,
+    is_exchange_ordering_enabled,
+    is_real_ordering_enabled,
+)
 from ...application.services.live_trading_service import (
     LiveTradingService,
     TradingMode,
@@ -125,12 +131,27 @@ async def toggle_live_trading(enable: bool = Query(..., description="Enable or d
     SAFETY: Requires explicit enable=true to turn on.
     """
     service = _get_live_trading_service()
+    env = get_runtime_env()
+    exchange_ordering = is_exchange_ordering_enabled(env)
+    real_ordering = is_real_ordering_enabled(env)
 
     if enable:
+        if not exchange_ordering:
+            service.enable_trading = False
+            logger.info("Paper mode requested /live/toggle enable; exchange execution remains disabled")
+            return {
+                "success": True,
+                "enabled": False,
+                "mode": service.mode.value,
+                "execution_mode": get_execution_mode(env),
+                "exchange_ordering_enabled": False,
+                "real_ordering_enabled": False,
+                "message": "Paper mode uses the local simulator; exchange order submission stays disabled.",
+                "status": service.get_status()
+            }
+
         # Safety check — use ENV variable (not legacy BINANCE_USE_TESTNET)
-        env_mode = os.getenv("ENV", "paper").lower()
-        use_testnet = (env_mode == "testnet")
-        if not use_testnet and service.mode.value != "paper":
+        if real_ordering:
             # Extra warning for production
             logger.warning("🔴 PRODUCTION LIVE TRADING ENABLED!")
 
@@ -144,7 +165,9 @@ async def toggle_live_trading(enable: bool = Query(..., description="Enable or d
         "success": True,
         "enabled": service.enable_trading,
         "mode": service.mode.value,
-        "real_ordering_enabled": service.mode == TradingMode.LIVE,
+        "execution_mode": get_execution_mode(env),
+        "exchange_ordering_enabled": exchange_ordering,
+        "real_ordering_enabled": real_ordering,
         "status": service.get_status()
     }
 
@@ -153,13 +176,13 @@ async def toggle_live_trading(enable: bool = Query(..., description="Enable or d
 async def get_toggle_status():
     """Get whether live trading is currently enabled."""
     service = _get_live_trading_service()
-    from src.config import get_execution_mode, get_runtime_env, is_real_ordering_enabled
 
     env = get_runtime_env()
     return {
         "enabled": service.enable_trading,
         "mode": service.mode.value,
         "execution_mode": get_execution_mode(env),
+        "exchange_ordering_enabled": is_exchange_ordering_enabled(env),
         "real_ordering_enabled": is_real_ordering_enabled(env),
     }
 

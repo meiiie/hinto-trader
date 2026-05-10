@@ -604,6 +604,25 @@ class LiveTradingService:
             self.logger.info("✅ signal_tracker self-healed and initialized.")
         return self._signal_tracker
 
+    @property
+    def exchange_ordering_enabled(self) -> bool:
+        """True only for modes that may submit orders to Binance."""
+        return self.mode in (TradingMode.TESTNET, TradingMode.LIVE)
+
+    def _guard_exchange_ordering(self, operation: str, symbol: Optional[str] = None) -> bool:
+        """Block exchange-order paths while the service is in local paper mode."""
+        if self.exchange_ordering_enabled:
+            return True
+
+        target = f" for {symbol.upper()}" if symbol else ""
+        self.logger.warning(
+            "PAPER exchange-order guard blocked %s%s. "
+            "Paper-real may use live market data, but execution must remain local-only.",
+            operation,
+            target,
+        )
+        return False
+
     def _get_total_slots(self) -> tuple:
         """
         SOTA FIX (Jan 2026): Get total slots used (positions + pending).
@@ -4411,6 +4430,9 @@ class LiveTradingService:
             f"🎯 TRIGGERED: {signal.direction.value} {signal.symbol} "
             f"target=${signal.target_price:.4f} actual=${current_price:.4f}"
         )
+
+        if not self._guard_exchange_ordering("triggered signal execution", signal.symbol):
+            return False
 
         # ═══════════════════════════════════════════════════════════════════════
         # SOTA (Feb 9, 2026): Dead Zone + CB check at EXECUTION TIME
@@ -9066,6 +9088,9 @@ class LiveTradingService:
         """
         symbol_upper = symbol.upper()
         self.logger.info(f"🚨 EXECUTING MARKET CLOSE: {symbol_upper} | Qty: {quantity} | Reason: {reason}")
+
+        if not self._guard_exchange_ordering("market close", symbol_upper):
+            return None
 
         # Set exit reason for Telegram notification
         if reason and reason != "MANUAL":

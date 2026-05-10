@@ -51,6 +51,12 @@ def is_real_ordering_enabled(env: Optional[str] = None) -> bool:
     return resolved_env == "live"
 
 
+def is_exchange_ordering_enabled(env: Optional[str] = None) -> bool:
+    """Return whether the runtime may submit orders to any Binance venue."""
+    resolved_env = normalize_runtime_env(env) if env is not None else get_runtime_env()
+    return resolved_env in {"testnet", "live"}
+
+
 def get_trading_mode_label(env: Optional[str] = None) -> str:
     """Return the public trading mode label used by API responses."""
     resolved_env = normalize_runtime_env(env) if env is not None else get_runtime_env()
