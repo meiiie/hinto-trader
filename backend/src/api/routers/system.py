@@ -48,7 +48,7 @@ async def get_status():
         "status": "ok",
         "timestamp": datetime.now().isoformat(),
         "service": "hinto-trader-backend",
-        "version": "0.2.0",
+        "version": "0.2.1",
         # SOTA: Data readiness for frontend
         "data_ready": data_ready,
         "ready_symbol_count": len(ready_symbols),

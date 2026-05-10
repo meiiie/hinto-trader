@@ -624,7 +624,7 @@ async def _background_heavy_init(app: FastAPI):
 app = FastAPI(
     title="Hinto Trader Pro API",
     description="Backend API for Hinto Trader Pro Desktop App",
-    version="0.2.0",
+    version="0.2.1",
     lifespan=lifespan
 )
 

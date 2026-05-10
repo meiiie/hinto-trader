@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.2.0-blue?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/version-0.2.1-blue?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/python-3.11+-yellow?style=flat-square&logo=python&logoColor=white" alt="Python" />
   <img src="https://img.shields.io/badge/FastAPI-backend-009688?style=flat-square" alt="FastAPI" />
   <img src="https://img.shields.io/badge/React-dashboard-61dafb?style=flat-square&logo=react&logoColor=222" alt="React" />
