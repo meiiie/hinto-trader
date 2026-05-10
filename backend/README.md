@@ -2,7 +2,7 @@
 
 Algorithmic trading engine for Binance Futures. Local-first execution with institutional-grade risk management.
 
-Current parity-corrected backtest research status lives in [docs/RESEARCH_STATUS_2026_03.md](/E:/Sach/DuAn/Hinto_Stock/docs/RESEARCH_STATUS_2026_03.md). Historical commands below remain useful, but should not be read as the current live-ready preset without checking that note first.
+Current strategy direction lives in [../docs/STRATEGY_ROADMAP.md](../docs/STRATEGY_ROADMAP.md). Historical commands below remain useful, but should not be read as the current live-ready preset without checking the roadmap and current validation results first.
 
 ## Architecture
 

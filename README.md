@@ -12,6 +12,7 @@
   <a href="#architecture">Architecture</a> |
   <a href="#quick-start">Quick Start</a> |
   <a href="#safety">Safety</a> |
+  <a href="#strategy-direction">Strategy Direction</a> |
   <a href="#contributing">Contributing</a>
 </p>
 
@@ -162,6 +163,17 @@ and the exchange behavior yourself.
 - Do not commit `.env`, `.env.production`, PEM files, databases, generated CSVs,
   or local logs.
 - Run `scripts/secret-scan.ps1` before every public release.
+
+## Strategy Direction
+
+Hinto is being developed as a research platform before it is treated as a live
+trading system. The current mean-reversion scalper is now a benchmark track, not
+a final answer. The next research track focuses on positive-skew continuation:
+small controlled losses, larger trailed winners, and validation by R-multiple
+distribution rather than headline win rate.
+
+See `docs/STRATEGY_ROADMAP.md` for promotion/kill criteria, broker expansion
+rules, and the clean-architecture path for adding new strategies.
 
 ## Repository Status
 
