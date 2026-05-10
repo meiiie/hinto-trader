@@ -1,9 +1,21 @@
 from fastapi import APIRouter, Depends, Request
 from datetime import datetime
 from typing import Dict, Any
+import logging
 import numpy as np
 
 from ..dependencies import get_realtime_service
+from src.config.runtime import (
+    get_execution_mode,
+    get_runtime_env,
+    get_trading_db_path,
+    is_paper_real_enabled,
+    is_real_ordering_enabled,
+    normalize_runtime_env,
+)
+
+
+logger = logging.getLogger(__name__)
 
 
 def _convert_numpy(obj):
@@ -66,13 +78,6 @@ async def get_config():
     - Testnet: Yellow banner (demo money)
     - Live: RED banner (real money!)
     """
-    from src.config import (
-        get_execution_mode,
-        get_runtime_env,
-        is_paper_real_enabled,
-        is_real_ordering_enabled,
-    )
-
     env = get_runtime_env()
     execution_mode = get_execution_mode(env)
     paper_real = is_paper_real_enabled(env)
@@ -86,7 +91,7 @@ async def get_config():
         "real_ordering_enabled": real_ordering,
         "market_data_source": "binance_mainnet_live" if env == "paper" else f"binance_{env}",
         "execution_venue": "local_paper_simulator" if env == "paper" else f"binance_{env}",
-        "db_path": f"data/{env}/trading_system.db",
+        "db_path": str(get_trading_db_path(env)),
         "warning": (
             "REAL MONEY MODE!" if real_ordering
             else "PAPER-REAL: live Binance market data, local simulated orders only." if paper_real
@@ -107,10 +112,9 @@ async def switch_mode(new_mode: str):
         new_mode: 'paper' or 'testnet' (NOT 'live')
     """
     import os
-    from functools import lru_cache
-
-    current = os.getenv("ENV", "paper")
-    new_mode = new_mode.lower()
+    current = get_runtime_env()
+    requested_mode = new_mode.lower().strip()
+    new_mode = normalize_runtime_env(requested_mode)
 
     # SAFETY: Never allow runtime switch TO live
     if new_mode == "live":
@@ -129,10 +133,10 @@ async def switch_mode(new_mode: str):
         }
 
     # Validate mode
-    if new_mode not in ["paper", "testnet"]:
+    if requested_mode not in ["paper", "testnet"]:
         return {
             "success": False,
-            "error": f"Invalid mode: {new_mode}",
+            "error": f"Invalid mode: {requested_mode}",
             "valid_modes": ["paper", "testnet"]
         }
 
@@ -168,7 +172,7 @@ async def switch_mode(new_mode: str):
         "success": True,
         "previous_mode": current,
         "current_mode": new_mode,
-        "db_path": f"data/{new_mode}/trading_system.db",
+        "db_path": str(get_trading_db_path(new_mode)),
         "balance": balance,
         "message": f"Switched from {current} to {new_mode}. Ready."
     }

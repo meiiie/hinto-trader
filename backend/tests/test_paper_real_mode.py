@@ -1,4 +1,4 @@
-from src.config import get_execution_mode, is_paper_real_enabled, is_real_ordering_enabled
+from src.config.runtime import get_execution_mode, is_paper_real_enabled, is_real_ordering_enabled
 from src.application.services.live_trading_service import LiveTradingService, TradingMode
 from src.domain.entities.trading_signal import TradingSignal, SignalType
 

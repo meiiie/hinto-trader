@@ -54,6 +54,7 @@ from ..application.analysis.trend_filter import TrendFilter # SOTA: For HTF Conf
 from ..application.services.settings_provider import SettingsProvider  # SOTA: Centralized config
 from ..application.services.reconciliation_service import ReconciliationService  # SOTA: Exchange sync
 from .monitoring.profit_chart_generator import ProfitChartGenerator  # SOTA: Telegram profit charts
+from ..config.runtime import get_runtime_env, get_trading_db_path
 from ..trading_contract import (
     PRODUCTION_MAX_SL_PCT,
     PRODUCTION_MTF_EMA_PERIOD,
@@ -100,7 +101,7 @@ class DIContainer:
 
         # SOTA: Current environment from ENV variable
         # CRITICAL: .strip() to remove any trailing whitespace from ENV
-        self._env = os.getenv("ENV", "paper").lower().strip()
+        self._env = get_runtime_env()
         self._trading_db_path = self._get_env_db_path()
 
     @property
@@ -114,7 +115,7 @@ class DIContainer:
 
     def refresh_env(self):
         """Refresh environment from ENV variable (call after mode switch)."""
-        self._env = os.getenv("ENV", "paper").lower().strip()
+        self._env = get_runtime_env()
         self._trading_db_path = self._get_env_db_path()
         self.logger.info(f"🔄 DI Container refreshed for ENV={self._env}")
 
@@ -125,11 +126,7 @@ class DIContainer:
         SOTA: Database isolation per environment (paper/testnet/live).
         Uses absolute path to avoid working directory issues.
         """
-        from pathlib import Path
-
-        # Get backend directory (where di_container.py is located)
-        backend_dir = Path(__file__).parent.parent.parent
-        db_path = backend_dir / "data" / self._env / "trading_system.db"
+        db_path = get_trading_db_path(self._env)
 
         # Ensure directory exists
         db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -996,19 +993,13 @@ class DIContainer:
 
         key = f'order_repository_{env}'
         if key not in self._instances:
-            # Get environment-aware database path
-            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-            if env in ['testnet', 'live']:
-                db_path = os.path.join(base_dir, 'data', env, 'trading_system.db')
-            else:
-                db_path = os.path.join(base_dir, 'data', 'paper', 'trading_system.db')
+            db_path = get_trading_db_path(env)
 
             # Ensure directory exists
-            os.makedirs(os.path.dirname(db_path), exist_ok=True)
+            db_path.parent.mkdir(parents=True, exist_ok=True)
 
             self.logger.info(f"📁 Creating SQLiteOrderRepository for {env}: {db_path}")
-            self._instances[key] = SQLiteOrderRepository(db_path=db_path)
+            self._instances[key] = SQLiteOrderRepository(db_path=str(db_path))
 
         return self._instances[key]
 
