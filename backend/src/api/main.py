@@ -67,6 +67,7 @@ async def lifespan(app: FastAPI):
 
     # Initialize startup state (for multi-level health check)
     app.state.startup_status = "initializing"
+    app.state.startup_phase = "initializing"
     app.state.services_ready = False
     app.state.config = config
     app.state.init_error = None
@@ -84,6 +85,7 @@ async def lifespan(app: FastAPI):
     # In frozen mode, asyncio.create_task() before yield may not work properly
     # Use asyncio.get_event_loop().create_task() explicitly
     app.state.startup_status = "connecting"
+    app.state.startup_phase = "background_init_scheduled"
     logger.info("[STARTUP] Scheduling background init task...")
 
     try:
@@ -169,11 +171,11 @@ async def lifespan(app: FastAPI):
 
             print("\n")
             print("=" * 70)
-            print(f"  🔴 SHUTDOWN REPORT - {env_mode} MODE")
+            print(f"  SHUTDOWN REPORT - {env_mode} MODE")
             print("=" * 70)
 
             # Session Info
-            print(f"\n📊 SESSION STATISTICS:")
+            print(f"\nSESSION STATISTICS:")
             print(f"   Duration:        {report.get('session_duration', 'N/A')}")
             print(f"   API Calls:       {report.get('total_api_calls', 0)}")
             print(f"   Avg Latency:     {report.get('avg_latency_ms', 0):.0f}ms")
@@ -182,7 +184,7 @@ async def lifespan(app: FastAPI):
             # Trading Summary
             if hasattr(app.state, 'live_trading_service') and app.state.live_trading_service:
                 lts = app.state.live_trading_service
-                print(f"\n💰 TRADING SUMMARY:")
+                print(f"\nTRADING SUMMARY:")
                 print(f"   Mode:            {lts.mode.value.upper()}")
                 print(f"   Initial Balance: ${lts.initial_balance:.2f}")
                 print(f"   Final Balance:   ${lts._cached_balance:.2f}")
@@ -191,19 +193,19 @@ async def lifespan(app: FastAPI):
                     print(f"   Pending Signals: {len(lts.signal_tracker)}")
 
             # Configuration
-            print(f"\n⚙️  CONFIGURATION:")
+            print(f"\nCONFIGURATION:")
             print(f"   ENV:             {env_mode}")
             print(f"   Symbols:         {len(multi_token_config.symbols)}")
             print(f"   Port:            8000")
 
             # Warnings
             if report.get('warnings'):
-                print(f"\n⚠️  WARNINGS:")
+                print(f"\nWARNINGS:")
                 for warn in report.get('warnings', [])[:5]:
                     print(f"   - {warn}")
 
             print("\n" + "=" * 70)
-            print("  ✅ Shutdown complete. All resources released.")
+            print("  Shutdown complete. All resources released.")
             print("=" * 70 + "\n")
 
         except Exception as e:
@@ -226,6 +228,9 @@ async def _background_heavy_init(app: FastAPI):
 
     monitor = get_startup_monitor()
 
+    def set_startup_phase(phase: str) -> None:
+        app.state.startup_phase = phase
+
     # SOTA GUARD: Prevent double initialization (causes duplicate signals)
     if getattr(app.state, '_init_started', False):
         logger.warning("[BACKGROUND] Init already started, skipping to prevent duplicates")
@@ -235,9 +240,11 @@ async def _background_heavy_init(app: FastAPI):
     try:
         print("[BACKGROUND] Starting heavy initialization...")
         logger.info("[BACKGROUND] Starting heavy initialization...")
+        set_startup_phase("heavy_init_started")
         await monitor.emit_progress(0, 100, "Starting system initialization...")
 
         # Step 1: Get singletons
+        set_startup_phase("loading_core_services")
         await monitor.emit_progress(5, 100, "Loading core services...")
         event_bus = get_event_bus()
         ws_manager = get_websocket_manager()
@@ -251,11 +258,13 @@ async def _background_heavy_init(app: FastAPI):
         app.state.shared_client = shared_client
 
         # Step 2: Start EventBus broadcast worker
+        set_startup_phase("starting_event_bus")
         await monitor.emit_progress(10, 100, "Starting internal event bus...")
         await event_bus.start_worker(ws_manager)
         logger.info("[BACKGROUND] EventBus started")
 
         # Step 2.5: SOTA Sync
+        set_startup_phase("syncing_configuration")
         await monitor.emit_progress(15, 100, "Syncing configuration...")
         try:
             paper_service = container.get_paper_trading_service()
@@ -282,6 +291,7 @@ async def _background_heavy_init(app: FastAPI):
         start_tasks = []
 
         total_symbols = len(multi_token_config.symbols)
+        set_startup_phase("initializing_realtime_services")
         await monitor.emit_progress(20, 100, f"Initializing {total_symbols} market data streams...")
 
         for idx, symbol in enumerate(multi_token_config.symbols):
@@ -300,6 +310,7 @@ async def _background_heavy_init(app: FastAPI):
             # Test showed 50 symbols load in 0.7s with asyncio.gather (vs 20s with batched)
             # Binance rate limit is 2400 req/min = 40 req/sec, we're well under
             await monitor.emit_progress(25, 100, f"Loading {len(start_tasks)} market data streams (parallel)...")
+            set_startup_phase("loading_realtime_market_data")
 
             t0 = asyncio.get_event_loop().time()
 
@@ -324,12 +335,13 @@ async def _background_heavy_init(app: FastAPI):
             # This ensures all symbol buffers are populated before users can interact with charts
             app.state.data_ready = True
             app.state.ready_symbols = [s.lower() for s in multi_token_config.symbols]
-            print(f"✅ [BACKGROUND] Data ready flag set - {len(app.state.ready_symbols)} symbols available")
-            logger.info(f"✅ [BACKGROUND] Data ready flag set - {len(app.state.ready_symbols)} symbols available")
+            print(f"[BACKGROUND] Data ready flag set - {len(app.state.ready_symbols)} symbols available")
+            logger.info(f"[BACKGROUND] Data ready flag set - {len(app.state.ready_symbols)} symbols available")
 
         app.state.realtime_services = services
 
         # Step 4: Setup SharkTankCoordinator callbacks
+        set_startup_phase("configuring_shark_tank")
         await monitor.emit_progress(75, 100, "Configuring Shark Tank Logic...")
         shark_tank = container.get_shark_tank_coordinator()
         paper_service = container.get_paper_trading_service()
@@ -337,6 +349,7 @@ async def _background_heavy_init(app: FastAPI):
 
         # SOTA (Jan 2026): Lazy initialization - call initialize_async() after event loop running
         if hasattr(live_trading_service, 'initialize_async'):
+            set_startup_phase("initializing_live_trading_service")
             await live_trading_service.initialize_async()
 
         app.state.live_trading_service = live_trading_service
@@ -466,6 +479,7 @@ async def _background_heavy_init(app: FastAPI):
 
         # Step 5: Live/Testnet specific setup
         if _env in ["testnet", "live"]:
+            set_startup_phase("starting_live_services")
             await monitor.emit_progress(80, 100, f"Connecting to Binance {_env.upper()}...")
             # State Reconciliation
             try:
@@ -507,27 +521,48 @@ async def _background_heavy_init(app: FastAPI):
 
             logger.info("[BACKGROUND] Live trading services started")
 
-        # Step 6: Connect shared WebSocket
+        # Step 6: Connect shared WebSocket. In paper mode this must never block
+        # the REST fallback, TTL cleanup, or SharkTank batch loop.
+        set_startup_phase("starting_market_data_runtime")
         await monitor.emit_progress(85, 100, "Establishing Realtime WebSocket Feed...")
-        try:
-            # DEBUG (Jan 2026): Log symbols before connect to verify registration
-            logger.info(f"🔍 DEBUG: SharedClient._symbols = {len(shared_client._symbols)} symbols")
-            logger.info(f"🔍 DEBUG: First 5 symbols: {shared_client._symbols[:5]}")
-            logger.info(f"🔍 DEBUG: SharedClient._handlers keys = {list(shared_client._handlers.keys())[:5]}...")
 
-            await shared_client.connect()
-            logger.info(f"[BACKGROUND] Combined Streams connected ({len(multi_token_config.symbols)} symbols)")
-            await monitor.emit_log(f"WS Connected for {len(multi_token_config.symbols)} symbols")
+        async def connect_shared_client_with_timeout():
+            try:
+                # DEBUG (Jan 2026): Log symbols before connect to verify registration
+                logger.info(f"🔍 DEBUG: SharedClient._symbols = {len(shared_client._symbols)} symbols")
+                logger.info(f"🔍 DEBUG: First 5 symbols: {shared_client._symbols[:5]}")
+                logger.info(f"🔍 DEBUG: SharedClient._handlers keys = {list(shared_client._handlers.keys())[:5]}...")
 
-            # FIX P0 (Feb 13, 2026): Ensure restored positions have active subscriptions
-            # Positions restored during initialize_async() add symbols to _symbols list
-            # but the actual WebSocket subscription only happens in connect().
-            # This call verifies/forces subscription for all monitored positions.
-            if live_trading_service and live_trading_service.position_monitor:
-                await live_trading_service.position_monitor.ensure_all_subscriptions()
-        except Exception as e:
-            logger.error(f"[BACKGROUND] SharedClient connect failed: {e}")
-            await monitor.emit_progress(85, 100, "WebSocket Connection Failed", level="error")
+                ws_connect_timeout = float(os.getenv("BINANCE_WS_CONNECT_TIMEOUT_SECONDS", "12"))
+                await asyncio.wait_for(shared_client.connect(), timeout=ws_connect_timeout)
+                logger.info(f"[BACKGROUND] Combined Streams connected ({len(multi_token_config.symbols)} symbols)")
+                await monitor.emit_log(f"WS Connected for {len(multi_token_config.symbols)} symbols")
+
+                # FIX P0 (Feb 13, 2026): Ensure restored positions have active subscriptions
+                # Positions restored during initialize_async() add symbols to _symbols list
+                # but the actual WebSocket subscription only happens in connect().
+                # This call verifies/forces subscription for all monitored positions.
+                if live_trading_service and live_trading_service.position_monitor:
+                    await live_trading_service.position_monitor.ensure_all_subscriptions()
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "[BACKGROUND] SharedClient connect timed out; "
+                    "continuing with REST market fallback"
+                )
+                try:
+                    await shared_client.disconnect()
+                except Exception as disconnect_error:
+                    logger.warning(f"[BACKGROUND] SharedClient cleanup after timeout failed: {disconnect_error}")
+                await monitor.emit_progress(85, 100, "WebSocket timeout; using REST fallback", level="warning")
+            except Exception as e:
+                logger.error(f"[BACKGROUND] SharedClient connect failed: {e}")
+                await monitor.emit_progress(85, 100, "WebSocket Connection Failed", level="error")
+
+        if _env == "paper":
+            asyncio.create_task(connect_shared_client_with_timeout())
+            logger.info("[BACKGROUND] SharedClient WebSocket connect scheduled in background for paper mode")
+        else:
+            await connect_shared_client_with_timeout()
 
         # Step 6.5: REST market-data fallback for paper-real/local networks.
         # Some local networks allow Binance REST but block WebSocket. Keep paper
@@ -574,21 +609,25 @@ async def _background_heavy_init(app: FastAPI):
                     logger.error(f"REST market fallback loop error: {e}")
 
         if _env == "paper":
+            set_startup_phase("starting_rest_market_fallback")
             asyncio.create_task(rest_market_poll_loop())
             logger.info("[BACKGROUND] REST market fallback loop started for paper mode")
 
         # Step 7: Start DataRetentionService
+        set_startup_phase("starting_data_retention")
         await monitor.emit_progress(90, 100, "Starting Data Retention Service...")
         await retention_service.start()
         logger.info("[BACKGROUND] DataRetentionService started")
 
         # Step 8: Start Scheduler
+        set_startup_phase("starting_scheduler")
         await monitor.emit_progress(92, 100, "Starting Background Schedulers...")
         scheduler = get_scheduler()
         await scheduler.start()
         app.state.scheduler = scheduler
 
         # Step 9: Start TTL Scheduler
+        set_startup_phase("starting_ttl_scheduler")
         from src.application.services.ttl_scheduler import init_ttl_scheduler
 
         def paper_cleanup_callback():
@@ -625,6 +664,7 @@ async def _background_heavy_init(app: FastAPI):
         logger.info(f"[BACKGROUND] TTLScheduler started for {_env} mode")
 
         # Step 10: Start SharkTank periodic flush
+        set_startup_phase("starting_signal_processor")
         await monitor.emit_progress(95, 100, "Starting Signal Processor...")
         async def shark_tank_flush_loop():
             """Periodically flush SharkTank to execute queued signals."""
@@ -658,12 +698,13 @@ async def _background_heavy_init(app: FastAPI):
 
         # Complete
         await monitor.emit_progress(100, 100, "System Ready", level="success")
+        set_startup_phase("ready")
         app.state.services_ready = True
         app.state.startup_status = "ready"
-        logger.info("[BACKGROUND] ✅ All services ready!")
+        logger.info("[BACKGROUND] All services ready!")
 
     except Exception as e:
-        print(f"❌ [BACKGROUND] Initialization failed: {e}")
+        print(f"[BACKGROUND] Initialization failed: {e}")
         logger.error(f"[BACKGROUND] Initialization failed: {e}")
         app.state.startup_status = "error"
         app.state.init_error = str(e)

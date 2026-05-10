@@ -41,20 +41,29 @@ router = APIRouter(
 )
 
 @router.get("/status")
-async def get_status():
+async def get_status(request: Request):
     """
     Health check endpoint to verify system status.
 
     SOTA (Jan 2026): Includes data_ready flag for frontend to know
     when all symbol data is pre-loaded and charts can render instantly.
     """
-    from fastapi import Request
-    from src.api.main import app
-
     # Get data readiness state from app.state
+    app = request.app
     data_ready = getattr(app.state, 'data_ready', False)
     ready_symbols = getattr(app.state, 'ready_symbols', [])
     startup_status = getattr(app.state, 'startup_status', 'initializing')
+    startup_phase = getattr(app.state, 'startup_phase', startup_status)
+    init_task = getattr(app.state, 'init_task', None)
+    init_task_done = bool(init_task.done()) if init_task else None
+    init_task_cancelled = bool(init_task.cancelled()) if init_task else None
+    init_task_exception = None
+    if init_task and init_task_done and not init_task_cancelled:
+        try:
+            exc = init_task.exception()
+            init_task_exception = repr(exc) if exc else None
+        except Exception as task_error:
+            init_task_exception = f"<exception unavailable: {task_error}>"
 
     return {
         "status": "ok",
@@ -64,7 +73,11 @@ async def get_status():
         # SOTA: Data readiness for frontend
         "data_ready": data_ready,
         "ready_symbol_count": len(ready_symbols),
-        "startup_status": startup_status
+        "startup_status": startup_status,
+        "startup_phase": startup_phase,
+        "init_task_done": init_task_done,
+        "init_task_cancelled": init_task_cancelled,
+        "init_task_exception": init_task_exception
     }
 
 
