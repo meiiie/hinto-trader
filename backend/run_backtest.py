@@ -16,6 +16,11 @@ import os
 import sys
 from typing import Any, List, Dict, Tuple, Optional
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 # Load .env for BACKTEST_SYMBOLS / USE_FIXED_SYMBOLS
 from dotenv import load_dotenv
 _env_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
@@ -33,18 +38,41 @@ from src.infrastructure.di_container import DIContainer
 from src.application.backtest.backtest_engine import BacktestEngine
 from src.infrastructure.api.binance_rest_client import BinanceRestClient
 from src.application.backtest.execution_simulator import ExecutionSimulator
-from src.application.analysis.backtest_report import (
-    calculate_max_drawdown_pct,
-    write_equity_curve_csv,
-)
-from src.application.analysis.adaptive_regime_router import (
-    AdaptiveRegimeRouter,
-    AdaptiveRouterFeatures,
-    BEARISH_TOXIC_SHORT_BLACKLIST,
-    RollingRouterState,
-    get_router_research_exit_profile,
-    get_router_recommended_symbol_side_blocks,
-)
+try:
+    from src.application.analysis.backtest_report import (
+        calculate_max_drawdown_pct,
+        write_equity_curve_csv,
+    )
+except ModuleNotFoundError as exc:
+    if exc.name != "src.application.analysis.backtest_report":
+        raise
+
+    def calculate_max_drawdown_pct(equity_curve: List[Dict[str, Any]]) -> float:
+        peak = 0.0
+        max_drawdown = 0.0
+        for point in equity_curve:
+            balance = float(point.get("balance", 0.0) or 0.0)
+            peak = max(peak, balance)
+            if peak > 0:
+                drawdown = ((peak - balance) / peak) * 100.0
+                max_drawdown = max(max_drawdown, drawdown)
+        return max_drawdown
+
+    def write_equity_curve_csv(
+        path: str,
+        equity_curve: List[Dict[str, Any]],
+        *,
+        tz_offset_hours: int = 7,
+    ) -> None:
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["Time", "Balance"])
+            for point in equity_curve:
+                ts = point.get("time")
+                if isinstance(ts, datetime):
+                    ts = ts + timedelta(hours=tz_offset_hours)
+                    ts = ts.strftime("%Y-%m-%d %H:%M:%S")
+                writer.writerow([ts, point.get("balance", 0.0)])
 from src.application.signals.strategy_ids import DEFAULT_STRATEGY_ID, SUPPORTED_STRATEGY_IDS
 from src.application.analysis.trend_filter import TrendFilter
 from src.infrastructure.data.historical_data_loader import HistoricalDataLoader
@@ -57,6 +85,36 @@ logging.basicConfig(
 )
 logger = logging.getLogger("BacktestRunner")
 logger.setLevel(logging.INFO)
+
+
+def _load_adaptive_router_components():
+    try:
+        from src.application.analysis.adaptive_regime_router import (
+            AdaptiveRegimeRouter,
+            AdaptiveRouterFeatures,
+            BEARISH_TOXIC_SHORT_BLACKLIST,
+            RollingRouterState,
+            get_router_research_exit_profile,
+            get_router_recommended_symbol_side_blocks,
+        )
+    except ModuleNotFoundError as exc:
+        if exc.name == "src.application.analysis.adaptive_regime_router":
+            raise RuntimeError(
+                "Adaptive regime router is an optional research module and is not "
+                "available in this checkout. Run without adaptive router flags, or "
+                "restore that module before using --adaptive-regime-router or "
+                "--rolling-adaptive-router."
+            ) from exc
+        raise
+
+    return (
+        AdaptiveRegimeRouter,
+        AdaptiveRouterFeatures,
+        BEARISH_TOXIC_SHORT_BLACKLIST,
+        RollingRouterState,
+        get_router_research_exit_profile,
+        get_router_recommended_symbol_side_blocks,
+    )
 
 
 def _parse_symbol_side_blacklist(raw: str) -> List[Tuple[str, str]]:
@@ -207,7 +265,8 @@ def _router_ema(values: List[float], period: int) -> float:
     return ema_value
 
 
-def _build_adaptive_router(args: argparse.Namespace) -> AdaptiveRegimeRouter:
+def _build_adaptive_router(args: argparse.Namespace) -> Any:
+    AdaptiveRegimeRouter = _load_adaptive_router_components()[0]
     return AdaptiveRegimeRouter(
         neutral_breadth_threshold=args.router_neutral_breadth_threshold,
         neutral_spread_floor_pct=args.router_neutral_spread_floor_pct,
@@ -227,9 +286,9 @@ async def _build_rolling_router_schedule(
     market_mode: MarketMode,
     quality_filter,
     default_top: int,
-    router: AdaptiveRegimeRouter,
+    router: Any,
     step_hours: int,
-) -> tuple[Dict[str, RollingRouterState], List[str], Dict[str, datetime], int, int]:
+) -> tuple[Dict[str, Any], List[str], Dict[str, datetime], int, int]:
     """
     Research-only rolling router.
 
@@ -245,6 +304,15 @@ async def _build_rolling_router_schedule(
     """
     from src.infrastructure.data.historical_volume_service import HistoricalVolumeService
     from src.infrastructure.indicators.regime_detector import RegimeDetector
+
+    (
+        _AdaptiveRegimeRouter,
+        AdaptiveRouterFeatures,
+        _BEARISH_TOXIC_SHORT_BLACKLIST,
+        RollingRouterState,
+        _get_router_research_exit_profile,
+        get_router_recommended_symbol_side_blocks,
+    ) = _load_adaptive_router_components()
 
     volume_service = HistoricalVolumeService(market_mode=market_mode)
     router_loader = HistoricalDataLoader(market_mode=market_mode)
@@ -315,7 +383,7 @@ async def _build_rolling_router_schedule(
         tzinfo=utc7,
     )
 
-    schedule: Dict[str, RollingRouterState] = {}
+    schedule: Dict[str, Any] = {}
     union_symbols: set[str] = set()
     active_from: Dict[str, datetime] = {}
 
@@ -802,18 +870,26 @@ async def main():
     if args.adaptive_regime_router or args.rolling_adaptive_router:
         _apply_router_research_contract_defaults(args)
 
-    rolling_router_schedule: Optional[Dict[str, RollingRouterState]] = None
+    rolling_router_schedule: Optional[Dict[str, Any]] = None
     rolling_router_exit_profiles: Optional[Dict[str, Dict[str, Any]]] = None
-    rolling_router_overlay_schedule: Optional[Dict[str, RollingRouterState]] = None
+    rolling_router_overlay_schedule: Optional[Dict[str, Any]] = None
     rolling_router_overlay_exit_profiles: Optional[Dict[str, Dict[str, Any]]] = None
     rolling_router_symbol_active_from: Optional[Dict[str, datetime]] = None
     engine_quality_filter = quality_filter
 
     if args.adaptive_regime_router:
-        from src.application.analysis.adaptive_regime_router import (
-            AdaptiveRegimeRouter,
-            AdaptiveRouterFeatures,
-        )
+        try:
+            (
+                _AdaptiveRegimeRouter,
+                AdaptiveRouterFeatures,
+                _BEARISH_TOXIC_SHORT_BLACKLIST,
+                _RollingRouterState,
+                _get_router_research_exit_profile,
+                get_router_recommended_symbol_side_blocks,
+            ) = _load_adaptive_router_components()
+        except RuntimeError as exc:
+            logger.error(str(exc))
+            return
         from src.infrastructure.indicators.regime_detector import RegimeDetector
 
         async def _load_router_features():
@@ -955,6 +1031,11 @@ async def main():
             print("Action:          Shield mode - no new entries")
             return
     if args.rolling_adaptive_router:
+        try:
+            get_router_research_exit_profile = _load_adaptive_router_components()[4]
+        except RuntimeError as exc:
+            logger.error(str(exc))
+            return
         if not end_time:
             logger.error("--rolling-adaptive-router requires a bounded --end date.")
             return

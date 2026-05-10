@@ -9,18 +9,22 @@ import logging
 import asyncio
 from bisect import bisect_right
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional, Dict, Any, Set, Tuple
+from typing import TYPE_CHECKING, List, Optional, Dict, Any, Set, Tuple
 
 from ...domain.entities.candle import Candle
 from ...domain.entities.trading_signal import TradingSignal
 from ..signals.signal_generator import SignalGenerator
 from .execution_simulator import ExecutionSimulator
 from ...domain.interfaces.i_historical_data_loader import IHistoricalDataLoader
-from ..analysis.adaptive_regime_router import RollingRouterState
 from ..analysis.trend_filter import TrendFilter
 from ..risk_management.circuit_breaker import CircuitBreaker
 from ..services.signal_confirmation_service import SignalConfirmationService
 from .time_filter import TimeFilter
+
+if TYPE_CHECKING:
+    from ..analysis.adaptive_regime_router import RollingRouterState
+else:
+    RollingRouterState = Any
 
 
 class BacktestEngine:
