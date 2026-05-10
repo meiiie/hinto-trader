@@ -144,6 +144,7 @@ async def toggle_live_trading(enable: bool = Query(..., description="Enable or d
         "success": True,
         "enabled": service.enable_trading,
         "mode": service.mode.value,
+        "real_ordering_enabled": service.mode == TradingMode.LIVE,
         "status": service.get_status()
     }
 
@@ -152,9 +153,14 @@ async def toggle_live_trading(enable: bool = Query(..., description="Enable or d
 async def get_toggle_status():
     """Get whether live trading is currently enabled."""
     service = _get_live_trading_service()
+    from src.config import get_execution_mode, get_runtime_env, is_real_ordering_enabled
+
+    env = get_runtime_env()
     return {
         "enabled": service.enable_trading,
-        "mode": service.mode.value
+        "mode": service.mode.value,
+        "execution_mode": get_execution_mode(env),
+        "real_ordering_enabled": is_real_ordering_enabled(env),
     }
 
 

@@ -2814,6 +2814,14 @@ class LiveTradingService:
         Returns:
             True if signal was added successfully, False if rejected
         """
+        if self.mode == TradingMode.PAPER:
+            self.logger.info(
+                "PAPER execution guard: rejecting LiveTradingService execution for %s. "
+                "Use PaperTradingService for simulated orders.",
+                getattr(signal, "symbol", "UNKNOWN"),
+            )
+            return False
+
         # SOTA (Jan 2026): BTC Filter - Block signals based on BTC trend
         if self._use_btc_filter:
             import asyncio

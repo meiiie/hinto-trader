@@ -4,7 +4,12 @@ import { apiUrl, ENDPOINTS } from '../config/api';
 
 interface EnvironmentConfig {
     environment: 'paper' | 'testnet' | 'live';
+    execution_mode?: 'paper' | 'paper_real' | 'testnet' | 'live';
+    is_paper_real?: boolean;
     is_production: boolean;
+    real_ordering_enabled?: boolean;
+    market_data_source?: string;
+    execution_venue?: string;
     db_path: string;
     warning: string | null;
 }
@@ -154,14 +159,18 @@ const EnvironmentBanner: React.FC<EnvironmentBannerProps> = ({
         return null;
     }
 
+    const isPaperReal = config.environment === 'paper' && (
+        config.execution_mode === 'paper_real' || config.is_paper_real === true
+    );
+
     const envConfig = {
         paper: {
             icon: <FileText size={16} />,
-            label: 'PAPER MODE',
-            description: 'Simulated Trading',
-            bgColor: '#1a472a',
-            borderColor: '#22c55e',
-            textColor: '#22c55e'
+            label: isPaperReal ? 'PAPER-REAL MODE' : 'PAPER MODE',
+            description: isPaperReal ? 'Live Binance data, simulated orders' : 'Simulated Trading',
+            bgColor: isPaperReal ? '#10231f' : '#1a472a',
+            borderColor: isPaperReal ? '#10b981' : '#22c55e',
+            textColor: isPaperReal ? '#34d399' : '#22c55e'
         },
         testnet: {
             icon: <TestTube size={16} />,
@@ -281,7 +290,7 @@ const EnvironmentBanner: React.FC<EnvironmentBannerProps> = ({
                                 transition: 'all 0.2s'
                             }}
                         >
-                            Paper
+                            {isPaperReal ? 'Paper-Real' : 'Paper'}
                         </button>
                         <button
                             disabled={true}
@@ -330,7 +339,7 @@ const EnvironmentBanner: React.FC<EnvironmentBannerProps> = ({
                     </div>
                 )}
 
-                {/* Live mode warning */}
+                {/* Live or paper-real safety notice */}
                 {config.environment === 'live' && (
                     <div style={{
                         display: 'flex',
@@ -340,6 +349,16 @@ const EnvironmentBanner: React.FC<EnvironmentBannerProps> = ({
                     }}>
                         <Shield size={16} />
                         <span>Real money at risk!</span>
+                    </div>
+                )}
+                {isPaperReal && (
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                    }}>
+                        <Shield size={16} />
+                        <span>No real orders</span>
                     </div>
                 )}
 

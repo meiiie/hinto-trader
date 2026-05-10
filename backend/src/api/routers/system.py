@@ -66,14 +66,32 @@ async def get_config():
     - Testnet: Yellow banner (demo money)
     - Live: RED banner (real money!)
     """
-    import os
-    env = os.getenv("ENV", "paper")
+    from src.config import (
+        get_execution_mode,
+        get_runtime_env,
+        is_paper_real_enabled,
+        is_real_ordering_enabled,
+    )
+
+    env = get_runtime_env()
+    execution_mode = get_execution_mode(env)
+    paper_real = is_paper_real_enabled(env)
+    real_ordering = is_real_ordering_enabled(env)
 
     return {
         "environment": env,
-        "is_production": env == "live",
+        "execution_mode": execution_mode,
+        "is_paper_real": paper_real,
+        "is_production": real_ordering,
+        "real_ordering_enabled": real_ordering,
+        "market_data_source": "binance_mainnet_live" if env == "paper" else f"binance_{env}",
+        "execution_venue": "local_paper_simulator" if env == "paper" else f"binance_{env}",
         "db_path": f"data/{env}/trading_system.db",
-        "warning": "⚠️ REAL MONEY MODE!" if env == "live" else None,
+        "warning": (
+            "REAL MONEY MODE!" if real_ordering
+            else "PAPER-REAL: live Binance market data, local simulated orders only." if paper_real
+            else None
+        ),
         "timestamp": datetime.now().isoformat()
     }
 

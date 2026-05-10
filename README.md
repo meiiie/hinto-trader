@@ -104,8 +104,10 @@ cd hinto-trader
 Copy-Item .env.example .env
 ```
 
-The default `.env.example` uses `ENV=paper`. Keep paper mode while you are
-learning the codebase.
+The default `.env.example` uses `ENV=paper` with `HINTO_PAPER_REAL=true`.
+This keeps live Binance market data and a live-like dashboard while orders and
+fills stay in the local simulator. Keep this mode while validating strategy
+behavior; see `docs/PAPER_REAL_MODE.md`.
 
 Run the backend:
 

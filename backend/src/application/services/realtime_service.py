@@ -1321,9 +1321,14 @@ class RealtimeService:
 
         SOTA: Extracted from _generate_signals for reuse.
         """
-        # LIVE TRADING: Route to live or paper based on toggle
-        if self.live_trading_service and self.live_trading_service.enable_trading:
-            # 🔴 LIVE MODE: Execute real orders on Binance
+        # Route to exchange-backed service only outside PAPER. In paper-real,
+        # the UI may look live-like, but execution must stay in PaperTradingService.
+        live_mode = (
+            self.live_trading_service
+            and getattr(getattr(self.live_trading_service, "mode", None), "value", "") != "paper"
+        )
+        if live_mode and self.live_trading_service.enable_trading:
+            # Exchange-backed mode: execute orders via Binance testnet/live.
             self.logger.warning(f"🔴 LIVE TRADING: Signal routed to LiveTradingService...")
             success = self.live_trading_service.execute_signal(signal)
             if success:

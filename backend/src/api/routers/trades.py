@@ -374,6 +374,10 @@ async def get_portfolio(
 
     # SOTA FIX: Import datetime at proper scope for ttl_seconds calculation
     from datetime import datetime as dt_now
+    from src.config import get_execution_mode, is_paper_real_enabled
+
+    execution_mode = get_execution_mode("paper")
+    paper_real = is_paper_real_enabled("paper")
 
     # Build response with enriched positions and pending orders
     response = {
@@ -403,7 +407,12 @@ async def get_portfolio(
             for order in pending_orders
         ],
         'trading_mode': 'PAPER',
-        'is_live': False
+        'is_live': False,
+        'execution_mode': execution_mode,
+        'is_paper_real': paper_real,
+        'real_ordering_enabled': False,
+        'market_data_source': 'binance_mainnet_live' if paper_real else 'local_simulation',
+        'execution_venue': 'local_paper_simulator',
     }
 
     # SOTA: Add pending signals to PAPER portfolio

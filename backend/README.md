@@ -65,6 +65,16 @@ Copy `.env.example` to `.env` and set:
 - `ENV`: `paper`, `testnet`, or `live`
 - `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID`
 
+For Binance-first validation without order risk, keep:
+
+```env
+ENV=paper
+HINTO_PAPER_REAL=true
+```
+
+This uses live Binance market data with local simulated fills. `/system/config`
+will report `real_ordering_enabled=false`.
+
 Settings priority: Database > ENV > code defaults. Use the API to override at runtime.
 
 ### Running

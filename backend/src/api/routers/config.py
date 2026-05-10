@@ -193,6 +193,8 @@ BINANCE_TESTNET_API_SECRET={config.testnet_api_secret}
             else:
                 env_content += """
 # Paper Trading Mode - No API Keys Required
+# Uses live Binance market data with local-only simulated execution.
+HINTO_PAPER_REAL=true
 """
 
             # Symbols from config
@@ -354,7 +356,8 @@ async def parse_env_content(request: ConfigParseRequest):
             "stop_loss_pct": float(parsed.get("STOP_LOSS_PCT", 0.5)),
             "take_profit_pct": float(parsed.get("TAKE_PROFIT_PCT", 2.0)),
             "trailing_stop_pct": float(parsed.get("TRAILING_STOP_PCT", 0.3)),
-            "symbols": parsed.get("SYMBOLS", "BTCUSDT,ETHUSDT,BNBUSDT").split(",")
+            "symbols": parsed.get("SYMBOLS", "BTCUSDT,ETHUSDT,BNBUSDT").split(","),
+            "paper_real": parsed.get("HINTO_PAPER_REAL", "true").lower() in ("1", "true", "yes", "on")
         },
         "raw": parsed
     }

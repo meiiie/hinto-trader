@@ -62,6 +62,38 @@ _ensure_env_loaded()
 DEFAULT_MAX_BOOK_TICKER_AGE_SECONDS = 2.0
 DEFAULT_TRADING_MODE = "PAPER"
 
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def get_runtime_env() -> str:
+    """Return the normalized runtime environment."""
+    env = os.getenv("ENV", "paper").lower().strip()
+    return env if env in {"paper", "testnet", "live"} else "paper"
+
+
+def is_paper_real_enabled(env: Optional[str] = None) -> bool:
+    """Paper-real uses live market data with local-only simulated execution."""
+    resolved_env = (env or get_runtime_env()).lower().strip()
+    return resolved_env == "paper" and _env_flag("HINTO_PAPER_REAL", True)
+
+
+def get_execution_mode(env: Optional[str] = None) -> str:
+    """Return the execution profile shown to operators and UI."""
+    resolved_env = (env or get_runtime_env()).lower().strip()
+    if is_paper_real_enabled(resolved_env):
+        return "paper_real"
+    return resolved_env if resolved_env in {"paper", "testnet", "live"} else "paper"
+
+
+def is_real_ordering_enabled(env: Optional[str] = None) -> bool:
+    """Only ENV=live may send production orders."""
+    return (env or get_runtime_env()).lower().strip() == "live"
+
 # Multi-token configuration
 DEFAULT_SYMBOLS = [
     "BTCUSDT",
@@ -76,7 +108,7 @@ DEFAULT_SYMBOLS = [
 
 def get_trading_db_path(env: Optional[str] = None, base_dir: Optional[Path] = None) -> Path:
     """Return the environment-aware trading DB path used by runtime services."""
-    resolved_env = (env or os.getenv("ENV", "paper")).lower().strip()
+    resolved_env = env.lower().strip() if env else get_runtime_env()
     if resolved_env not in {"paper", "testnet", "live"}:
         resolved_env = "paper"
 

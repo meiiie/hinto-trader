@@ -207,7 +207,8 @@ function App() {
         // SOTA: Update live trading status from backend
         if (liveRes.ok) {
           const liveData = await liveRes.json();
-          setIsLiveTrading(liveData.enabled === true && liveData.mode !== 'PAPER');
+          const serviceMode = String(liveData.mode || '').toLowerCase();
+          setIsLiveTrading(liveData.enabled === true && serviceMode !== 'paper');
         }
 
         // SOTA: Fetch current environment
