@@ -173,7 +173,13 @@ class BinanceFuturesClient:
             self.api_key = (api_key or os.getenv("BINANCE_API_KEY", "")).strip()
             self.api_secret = (api_secret or os.getenv("BINANCE_API_SECRET", "")).strip()
             self.base_url = self.PRODUCTION_BASE_URL
-            self.logger.warning("🔴 RUNNING IN PRODUCTION MODE - Real money!")
+            env_mode = os.getenv("ENV", "paper").lower().strip()
+            if env_mode == "paper":
+                self.logger.info(
+                    "PAPER mode using Binance mainnet market-data endpoint; order routing remains local."
+                )
+            else:
+                self.logger.warning("🔴 RUNNING IN PRODUCTION MODE - Real money!")
 
         if not self.api_key or not self.api_secret:
             raise ValueError("API credentials not provided. Set env vars or pass directly.")
@@ -212,9 +218,11 @@ class BinanceFuturesClient:
         if not hasattr(self._session_local, 'session'):
             self._session_local.session = requests.Session()
 
-            # DEBUG: Inspect key format
-            key_repr = repr(self.api_key)
-            self.logger.info(f"🔑 Session Init - Key Repr: {key_repr} (Len: {len(self.api_key)})")
+            self.logger.info(
+                "Binance session initialized | api_key_present=%s | key_len=%d",
+                bool(self.api_key),
+                len(self.api_key),
+            )
 
             self._session_local.session.headers.update({
                 "X-MBX-APIKEY": self.api_key,

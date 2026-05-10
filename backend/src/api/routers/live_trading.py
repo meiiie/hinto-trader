@@ -626,10 +626,28 @@ async def close_all_positions():
 
 @router.get("/balance", summary="Get account balance")
 async def get_balance():
-    """Get current account balance (direct from exchange)."""
+    """Get current account balance from the active execution venue."""
     try:
         # Use ENV variable (not legacy BINANCE_USE_TESTNET which defaults to testnet)
-        env_mode = os.getenv("ENV", "paper").lower()
+        env_mode = get_runtime_env()
+        if not is_exchange_ordering_enabled(env_mode):
+            container = get_container()
+            paper_service = container.get_paper_trading_service()
+            wallet = paper_service.get_wallet_balance()
+            return {
+                "usdt_available": wallet,
+                "all_assets": [
+                    {
+                        "asset": "USDT",
+                        "wallet_balance": wallet,
+                        "available_balance": paper_service.get_available_balance(0),
+                    }
+                ],
+                "execution_mode": get_execution_mode(env_mode),
+                "exchange_ordering_enabled": False,
+                "real_ordering_enabled": False,
+            }
+
         use_testnet = (env_mode == "testnet")
 
         # SOTA FIX: Run blocking API calls in thread pool to prevent event loop freeze
