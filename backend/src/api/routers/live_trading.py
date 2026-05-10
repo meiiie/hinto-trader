@@ -27,6 +27,12 @@ from ...application.services.live_trading_service import (
 )
 from ...infrastructure.api.binance_futures_client import BinanceFuturesClient
 from ..dependencies import get_container
+from src.api.paper_order_enrichment import (
+    build_signal_cache,
+    calculate_distance_pct,
+    enrich_paper_order,
+    resolve_paper_order_current_price,
+)
 
 router = APIRouter(prefix="/live", tags=["Live Trading"])
 logger = logging.getLogger(__name__)
@@ -391,13 +397,32 @@ async def get_shark_tank_status():
                 "quantity": pos.quantity if hasattr(pos, 'quantity') else (pos.size if hasattr(pos, 'size') else 0)
             })
 
-        for order in paper_service.repo.get_pending_orders():
+        pending_orders = paper_service.repo.get_pending_orders()
+        signal_cache = build_signal_cache(pending_orders, container.get_signal_lifecycle_service())
+        pending_with_metadata = [
+            (order, enrich_paper_order(order, signal_cache))
+            for order in pending_orders
+        ]
+        pending_with_metadata.sort(
+            key=lambda item: item[1].get("confidence") or 0,
+            reverse=True
+        )
+
+        for rank, (order, metadata) in enumerate(pending_with_metadata, start=1):
+            current_price = resolve_paper_order_current_price(order, paper_service.market_data_repo)
+            distance_pct = calculate_distance_pct(order.entry_price, current_price)
+
             pending_symbols.append({
                 "symbol": order.symbol.replace("USDT", ""),
                 "side": order.side,
                 "entry_price": order.entry_price,
-                "distance_pct": 0,  # Paper mode doesn't track real-time distance
-                "locked": False
+                "current_price": current_price,
+                "distance_pct": round(distance_pct, 2) if distance_pct is not None else None,
+                "locked": distance_pct is not None and distance_pct < 0.2,
+                "confidence": metadata.get("confidence"),
+                "confidence_level": metadata.get("confidence_level"),
+                "risk_reward_ratio": metadata.get("risk_reward_ratio"),
+                "rank": rank
             })
 
     return {

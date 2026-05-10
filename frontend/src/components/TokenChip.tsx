@@ -21,8 +21,8 @@ export interface TokenChipProps {
     state: TokenState;
     side?: 'LONG' | 'SHORT';
     pnl?: number;
-    distancePct?: number;
-    confidence?: number;  // NEW: Signal confidence (0-1)
+    distancePct?: number | null;
+    confidence?: number | null;  // NEW: Signal confidence (0-1)
     rank?: number;        // NEW: Position in ranking
     onClick?: () => void;
 }
@@ -160,12 +160,12 @@ export const TokenChip: React.FC<TokenChipProps> = ({
                     color: state === 'locked' ? COLORS.yellow : COLORS.textTertiary,
                     fontFamily: 'monospace'
                 }}>
-                    {confidence !== undefined && (
+                    {typeof confidence === 'number' && (
                         <span style={{ color: COLORS.buy, marginRight: '3px' }}>
                             {(confidence * 100).toFixed(0)}%
                         </span>
                     )}
-                    {distancePct !== undefined && (
+                    {typeof distancePct === 'number' && (
                         <span>{distancePct.toFixed(1)}%</span>
                     )}
                 </span>

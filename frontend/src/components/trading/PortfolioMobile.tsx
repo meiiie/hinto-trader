@@ -74,6 +74,11 @@ export interface PendingOrder {
   created_at?: string;
   margin?: number;
   leverage?: number;
+  confidence?: number | null;
+  confidence_level?: 'high' | 'medium' | 'low' | null;
+  risk_reward_ratio?: number | null;
+  current_price?: number;
+  distance_pct?: number | null;
 }
 
 interface BalanceInfo {
@@ -104,7 +109,7 @@ interface SharkTankStatus {
     phase?: string;
     is_breakeven?: boolean;
   }>;
-  pending_symbols?: Array<{ symbol: string; side: string; entry_price: number; distance_pct: number; locked: boolean; confidence?: number; rank?: number }>;
+  pending_symbols?: Array<{ symbol: string; side: string; entry_price: number; distance_pct: number | null; locked: boolean; confidence?: number | null; rank?: number; risk_reward_ratio?: number | null }>;
   pending_list?: Array<{ symbol: string; direction: 'buy' | 'sell'; confidence: number; queued_at: string }>;
 }
 
@@ -412,6 +417,12 @@ const PendingOrderCard: React.FC<{
     hour: '2-digit', minute: '2-digit',
     day: '2-digit', month: '2-digit'
   }) : '--';
+  const confidenceText = typeof order.confidence === 'number'
+    ? `${Math.round(order.confidence * 100)}%`
+    : '--';
+  const rrText = typeof order.risk_reward_ratio === 'number'
+    ? `1:${order.risk_reward_ratio.toFixed(1)}`
+    : '--';
 
   return (
     <div style={{
@@ -480,7 +491,7 @@ const PendingOrderCard: React.FC<{
           background: COLORS.bgPrimary,
         }}>
           {/* Data Grid: Size | SL | Margin */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 12 }}>
             <DetailItem
               label="Size (USDT)"
               value={order.size.toLocaleString('en-US', { maximumFractionDigits: 2 })}
@@ -492,6 +503,14 @@ const PendingOrderCard: React.FC<{
             <DetailItem
               label="Margin"
               value={order.margin ? `$${order.margin.toFixed(2)}` : '--'}
+            />
+            <DetailItem
+              label="Confidence"
+              value={confidenceText}
+            />
+            <DetailItem
+              label="R:R"
+              value={rrText}
             />
           </div>
 

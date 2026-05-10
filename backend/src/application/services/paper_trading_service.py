@@ -358,6 +358,11 @@ class PaperTradingService:
 
         # 3. Create PENDING Position (Limit Order)
         tp1 = signal.tp_levels.get('tp1', 0.0) if signal.tp_levels else 0.0
+        risk = abs(entry_price - stop_loss) if stop_loss else 0.0
+        reward = abs(tp1 - entry_price) if tp1 else 0.0
+        risk_reward_ratio = signal.risk_reward_ratio
+        if risk_reward_ratio is None and risk > 0 and reward > 0:
+            risk_reward_ratio = reward / risk
 
         # Calculate Liquidation Price (Binance Isolated Margin Formula)
         # SOTA SYNC: Match Backtest formula with MMR (line 603-606)
@@ -381,7 +386,11 @@ class PaperTradingService:
             take_profit=tp1,
             open_time=datetime.now(),
             # SOTA (Jan 2026): Pass ATR for trailing stop (match Backtest)
-            atr=signal.indicators.get('atr', 0.0) if signal.indicators else 0.0
+            atr=signal.indicators.get('atr', 0.0) if signal.indicators else 0.0,
+            signal_id=signal.id,
+            confidence=signal.confidence,
+            confidence_level=signal.confidence_level.value,
+            risk_reward_ratio=risk_reward_ratio
         )
 
         self.repo.save_order(position)

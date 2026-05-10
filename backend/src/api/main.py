@@ -8,9 +8,10 @@ import logging
 from src.api.routers import system, market, settings, trades, signals, backtest, shark_tank, live_trading, config, live_monitoring, analytics
 from src.api.routers.market import market_router
 from src.api.routers.config import config_router
-from src.api.dependencies import get_realtime_service, get_container
+from src.api.dependencies import get_realtime_service, get_container, get_signal_lifecycle_service
 from src.api.event_bus import get_event_bus
 from src.api.websocket_manager import get_websocket_manager
+from src.api.paper_order_enrichment import build_signal_cache, enrich_paper_order
 from src.config import MultiTokenConfig
 from src.infrastructure.websocket.shared_binance_client import get_shared_binance_client
 from src.infrastructure.services.scheduler_service import get_scheduler
@@ -390,14 +391,16 @@ async def _background_heavy_init(app: FastAPI):
                     for symbol, signal in live_trading_service.signal_tracker.get_all_pending().items()
                 ]
             elif paper_service:
+                pending_orders = paper_service.repo.get_pending_orders()
+                signal_cache = build_signal_cache(pending_orders, get_signal_lifecycle_service())
                 return [
                     {
-                        'symbol': order.get('symbol', ''),
-                        'confidence': order.get('confidence', 0.5),
-                        'target_price': order.get('entry_price', order.get('target_price', 0)),
-                        'entry_price': order.get('entry_price', 0)
+                        'symbol': order.symbol,
+                        'target_price': order.entry_price,
+                        'entry_price': order.entry_price,
+                        **enrich_paper_order(order, signal_cache)
                     }
-                    for order in paper_service.repo.get_pending_orders()
+                    for order in pending_orders
                 ]
             return []
 

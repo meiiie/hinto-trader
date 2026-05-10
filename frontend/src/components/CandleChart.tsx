@@ -1399,8 +1399,8 @@ const CandleChart: React.FC<CandleChartProps> = ({
                             <div style={{ marginBottom: '4px' }}>Entry: <span style={{ fontFamily: "'JetBrains Mono', monospace", color: BINANCE_COLORS.textPrimary }}>${(tooltipData.signal.entry_price ?? 0).toFixed(2)}</span></div>
                             <div style={{ marginBottom: '4px' }}>Stop Loss: <span style={{ fontFamily: "'JetBrains Mono', monospace", color: BINANCE_COLORS.sell }}>${(tooltipData.signal.stop_loss ?? 0).toFixed(2)}</span></div>
                             <div style={{ marginBottom: '4px' }}>Take Profit: <span style={{ fontFamily: "'JetBrains Mono', monospace", color: BINANCE_COLORS.buy }}>${(tooltipData.signal.take_profit ?? 0).toFixed(2)}</span></div>
-                            <div style={{ marginBottom: '4px' }}>Confidence: <span style={{ fontFamily: "'JetBrains Mono', monospace", color: BINANCE_COLORS.vwap }}>{((tooltipData.signal.confidence ?? 0) * 100).toFixed(0)}%</span></div>
-                            <div>R:R Ratio: <span style={{ fontFamily: "'JetBrains Mono', monospace", color: BINANCE_COLORS.bollinger }}>{(tooltipData.signal.risk_reward_ratio ?? 0).toFixed(2)}</span></div>
+                            <div style={{ marginBottom: '4px' }}>Confidence: <span style={{ fontFamily: "'JetBrains Mono', monospace", color: BINANCE_COLORS.vwap }}>{typeof tooltipData.signal.confidence === 'number' ? `${(tooltipData.signal.confidence * 100).toFixed(0)}%` : '--'}</span></div>
+                            <div>R:R Ratio: <span style={{ fontFamily: "'JetBrains Mono', monospace", color: BINANCE_COLORS.bollinger }}>{typeof tooltipData.signal.risk_reward_ratio === 'number' ? tooltipData.signal.risk_reward_ratio.toFixed(2) : '--'}</span></div>
                         </div>
                     </div>
                 )}
@@ -1430,10 +1430,10 @@ const CandleChart: React.FC<CandleChartProps> = ({
                     </div>
                     <div style={{ display: 'flex', gap: '24px' }}>
                         <span style={{ color: BINANCE_COLORS.textTertiary }}>
-                            Confidence: <span style={{ fontFamily: "'JetBrains Mono', monospace", color: BINANCE_COLORS.vwap }}>{((activeSignal.confidence ?? 0) * 100).toFixed(0)}%</span>
+                            Confidence: <span style={{ fontFamily: "'JetBrains Mono', monospace", color: BINANCE_COLORS.vwap }}>{typeof activeSignal.confidence === 'number' ? `${(activeSignal.confidence * 100).toFixed(0)}%` : '--'}</span>
                         </span>
                         <span style={{ color: BINANCE_COLORS.textTertiary }}>
-                            R:R: <span style={{ fontFamily: "'JetBrains Mono', monospace", color: BINANCE_COLORS.bollinger }}>{(activeSignal.risk_reward_ratio ?? 0).toFixed(2)}</span>
+                            R:R: <span style={{ fontFamily: "'JetBrains Mono', monospace", color: BINANCE_COLORS.bollinger }}>{typeof activeSignal.risk_reward_ratio === 'number' ? activeSignal.risk_reward_ratio.toFixed(2) : '--'}</span>
                         </span>
                     </div>
                 </div>
