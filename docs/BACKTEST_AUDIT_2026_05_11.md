@@ -129,6 +129,58 @@ This is an improvement over the baseline, but still not a robust edge. A profit
 factor near `1.07` can disappear with small fee, spread, latency, or fill-quality
 drift.
 
+## Matrix and Walk-Forward Follow-Up
+
+`backend/scripts/run_research_matrix.py` now runs reproducible strategy cases
+through the existing event-driven backtester and attaches `research_audit`
+output to each case.
+
+Thirty-day fixed universe matrix:
+
+- baseline contract: `-7.1%` audit return, PF `0.91`, reject
+- `bounce-confirm + daily-symbol-loss-limit 2`: `+2.5%`, PF `1.05`, paper-only
+- trend runner: `-7.1%`, PF `0.56`, reject
+- bounce without MTF trend filter: `-19.6%`, reject
+- bounce without delta divergence: `-12.5%`, reject
+
+Interpretation: the MTF trend and delta-divergence filters are doing real risk
+work. Removing either one materially worsens the strategy.
+
+Symbol-universe test:
+
+- 60-day major universe (`BTC, ETH, BNB, SOL, XRP`): `+20.1%`, PF `1.45`,
+  only `78` trades, paper-only due to sample size
+- 120-day major universe: `+17.7%`, PF `1.21`, `126` trades, candidate for
+  more paper research
+- 120-day same major universe without bounce filter: `-22.9%`, PF `0.86`,
+  reject
+
+Walk-forward checks on the major-universe candidate were positive on the
+available 30-day windows:
+
+- `2026-01-11 -> 2026-02-10`: `+5.0%`, PF `1.27`, `30` trades
+- `2026-03-12 -> 2026-04-11`: `+12.8%`, PF `1.56`, `43` trades
+- `2026-04-11 -> 2026-05-11`: `+8.9%`, PF `1.43`, `35` trades
+
+The `2026-02-10 -> 2026-03-12` window was rejected by the backtest engine due
+to a 1m cache coverage gap for `BNBUSDT`. This is the correct behavior:
+paper-like backtests must fail closed when intrabar SL/TP data is incomplete.
+
+Current best research candidate:
+
+```bash
+python backend/run_backtest.py \
+  --symbols BTCUSDT,ETHUSDT,BNBUSDT,SOLUSDT,XRPUSDT \
+  --days 120 --balance 100 --risk 0.01 --leverage 20 \
+  --max-pos 4 --no-compound --full-tp --maker-orders \
+  --bounce-confirm --daily-symbol-loss-limit 2
+```
+
+This is still not live approval. The sample is only `126` trades, below the
+long-run promotion rule. It is a stronger paper candidate than the broad
+universe because it avoids weaker altcoin behavior and retains the filters that
+survived ablation.
+
 Parallel-run note: `run_backtest.py` now writes output artifacts with
 microsecond timestamps and reuses one run stamp for trade, equity, and replay
 files. This prevents simultaneous research jobs from overwriting each other.

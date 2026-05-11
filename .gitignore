@@ -83,6 +83,7 @@ data/cache/volume_rankings/
 portfolio_backtest_*.csv
 backend/portfolio_backtest_*.csv
 backend/experiment_*.json
+backend/research_matrix_*.json
 run_bt.bat
 
 # Temp output files

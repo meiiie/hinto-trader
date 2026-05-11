@@ -1949,12 +1949,10 @@ async def main():
 
         # SOTA (Jan 2026): Export Replay Data JSON if enabled
         if args.visual and 'replay_data' in result and result['replay_data']:
-            json_filename = f"replay_data_{run_stamp}.json"
             try:
-                import json
-                with open(json_filename, 'w', encoding='utf-8') as f:
+                with open(replay_filename, 'w', encoding='utf-8') as f:
                     json.dump(result['replay_data'], f, indent=4, default=str)
-                print(f"📽️  UI Replay Data saved to: {json_filename}")
+                print(f"UI Replay Data saved to: {replay_filename}")
             except Exception as e:
                 logger.error(f"Failed to save Replay JSON: {e}")
 

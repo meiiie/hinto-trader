@@ -66,6 +66,21 @@ Sixty-day follow-up of the same paper candidate improved to about `+6.4%` with
 That is still below the promotion threshold. Treat it as a monitored paper
 candidate, not a live strategy.
 
+Major-universe follow-up:
+
+- `BTC, ETH, BNB, SOL, XRP` with `--bounce-confirm --daily-symbol-loss-limit 2`
+  improved to about `+17.7%` over 120 days, PF `1.21`, `126` trades, max
+  drawdown about `11.2%`;
+- the same major universe without bounce confirmation was about `-22.9%`, PF
+  `0.86`;
+- removing MTF trend or delta-divergence filters from the broad candidate was
+  strongly negative, so both filters remain part of the research contract.
+
+This becomes the strongest current paper candidate, but it is not live-ready.
+The sample is still far below 1,000 out-of-sample trades and one 30-day
+walk-forward window was blocked by missing 1m data coverage rather than forced
+through with incomplete intrabar information.
+
 ## Research Tracks
 
 ### Track A: Mean-Reversion Scalper
@@ -91,14 +106,16 @@ Current paper candidate:
 
 ```bash
 python backend/run_backtest.py \
-  --top 30 --days 30 --balance 100 --risk 0.01 --leverage 20 \
+  --symbols BTCUSDT,ETHUSDT,BNBUSDT,SOLUSDT,XRPUSDT \
+  --days 120 --balance 100 --risk 0.01 --leverage 20 \
   --max-pos 4 --no-compound --full-tp --maker-orders \
   --bounce-confirm --daily-symbol-loss-limit 2
 ```
 
-Do not add symbol-side quarantine or broad hour exclusions to production based
-on the current 30-day sample. They either reduced returns or looked like
-sample-specific curve fitting.
+Keep the broad fixed universe as a benchmark, not the primary candidate. Do not
+add symbol-side quarantine or broad hour exclusions to production based on the
+current sample. They either reduced returns or looked like sample-specific curve
+fitting.
 
 ### Track B: Positive-Skew Trend Runner
 
@@ -191,6 +208,9 @@ Phase 3: Experiment discipline
 - `run_backtest.py` writes local `experiment_*.json` metadata for each run;
   these files are ignored by Git and should be copied into reports only when a
   specific result is promoted for discussion.
+- `scripts/run_research_matrix.py` runs named strategy cases and records
+  elapsed time plus audit output. Use it for ablations and symbol-universe
+  comparisons before touching production defaults.
 - Report R-multiple distribution, payoff skew, profit factor, max drawdown,
   regime contribution, and bootstrap/Monte Carlo robustness.
 - Reject experiments that improve PnL only by increasing leverage.
