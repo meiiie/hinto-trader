@@ -367,6 +367,7 @@ async def get_portfolio(
                     # Release locked margin
                     paper_service._locked_in_orders -= order.margin
                     paper_service._locked_in_orders = max(0.0, paper_service._locked_in_orders)
+                    paper_service._mark_signal_expired(order.signal_id)
                     logger.info(f"⏰ [PORTFOLIO] TTL EXPIRED: {order.symbol} (age={age_seconds/60:.1f}min)")
 
         # Now get fresh data
@@ -381,6 +382,7 @@ async def get_portfolio(
     # SOTA FIX: Import datetime at proper scope for ttl_seconds calculation
     from datetime import datetime as dt_now
     from src.config import get_execution_mode, is_paper_real_enabled
+    from src.trading_contract import PRODUCTION_ORDER_TTL_MINUTES
 
     execution_mode = get_execution_mode("paper")
     paper_real = is_paper_real_enabled("paper")
@@ -412,7 +414,7 @@ async def get_portfolio(
             "take_profits": [order.take_profit] if order.take_profit else [],
             "created_at": order.open_time.isoformat() if order.open_time else None,
             "expires_at": None,
-            "ttl_seconds": max(0, 45*60 - int((dt_now.now() - order.open_time).total_seconds())) if order.open_time else 0,
+            "ttl_seconds": max(0, PRODUCTION_ORDER_TTL_MINUTES * 60 - int((dt_now.now() - order.open_time).total_seconds())) if order.open_time else 0,
             "is_live": False,
             "current_price": current_price,
             "distance_pct": _get_paper_order_distance_pct(order, current_price),
