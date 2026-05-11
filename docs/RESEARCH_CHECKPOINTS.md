@@ -21,6 +21,16 @@ The checkpoint is written to `backend/research_checkpoints/` and ignored by Git.
 Checkpoints may include `paper_env_suggestion` only when the audit decision is
 not `REJECT`. The script never mutates `.env` automatically.
 
+To apply a reviewed non-rejected checkpoint to local paper mode:
+
+```bash
+python backend/scripts/apply_paper_checkpoint.py \
+  backend/research_checkpoints/checkpoint_YYYYMMDD_HHMMSS_hash.json
+```
+
+The apply script refuses `REJECT`, only updates paper allowlist keys, preserves
+secrets, and creates a timestamped `.env` backup.
+
 When metadata includes both `requested_symbols` and `eligible_symbols`, paper
 suggestions use `eligible_symbols`. This prevents a runtime paper config from
 including symbols that were excluded by coverage or quality gates during the

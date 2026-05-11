@@ -180,17 +180,35 @@ positive-expectancy probability about `83.5%`, 5th-percentile return about
 `-10.6%`. Future metadata records both requested and eligible symbols so
 checkpoints cannot confuse the two universes.
 
-Current best research experiment:
+Removing the negative `SOLUSDT` leg from the same covered window produced a
+small-sample paper experiment:
+
+- universe: `ETHUSDT, BNBUSDT, XRPUSDT`
+- return: `+20.6%`
+- trades: `85`
+- PF: `1.38`
+- max drawdown: about `8.6%`
+- bootstrap positive-expectancy probability: about `93-94%`
+- decision: `PAPER_ONLY_SMALL_SAMPLE`
+
+This is the first non-rejected checkpoint. It is suitable only for paper-mode
+observation because the trade count is below `100`, and the 5th-percentile
+bootstrapped return can still dip slightly negative.
+
+Current paper-observation checkpoint experiment:
 
 ```bash
 python backend/run_backtest.py \
-  --symbols BTCUSDT,ETHUSDT,BNBUSDT,SOLUSDT,XRPUSDT \
-  --days 120 --balance 100 --risk 0.01 --leverage 20 \
-  --max-pos 4 --no-compound --full-tp --maker-orders \
+  --symbols ETHUSDT,BNBUSDT,XRPUSDT \
+  --start 2026-01-24T00:00:00+00:00 --balance 100 --risk 0.01 --leverage 20 \
+  --max-pos 3 --no-compound --full-tp --maker-orders \
   --bounce-confirm --daily-symbol-loss-limit 2
 ```
 
-After adding bootstrap expectancy checks, this is still not a robust candidate:
+Checkpoint hash: `c1b97eeaa869`.
+
+The wider major-universe experiment remains rejected after adding bootstrap
+expectancy checks:
 
 - bootstrap positive-expectancy probability: about `85%`
 - bootstrap 5th-percentile expectancy: about `-0.08` per trade
@@ -209,9 +227,9 @@ Stress follow-up on the same 120-day major-universe experiment:
 - maker plus `0.02%` fill-buffer stress: `+16.1%`, PF `1.20`, bootstrap
   positive expectancy probability about `84%`, reject
 
-These stress runs support the same decision: do not adjust runtime paper
-configuration yet. A checkpoint was created for each stress result, and both
-correctly produced no `paper_env_suggestion`.
+These stress runs support the same decision: do not promote the wider
+major-universe runtime configuration. A checkpoint was created for each stress
+result, and both correctly produced no `paper_env_suggestion`.
 
 Parallel-run note: `run_backtest.py` now writes output artifacts with
 microsecond timestamps and reuses one run stamp for trade, equity, and replay
