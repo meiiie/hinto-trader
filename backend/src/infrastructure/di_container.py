@@ -56,10 +56,12 @@ from ..application.services.reconciliation_service import ReconciliationService 
 from .monitoring.profit_chart_generator import ProfitChartGenerator  # SOTA: Telegram profit charts
 from ..config.runtime import get_runtime_env, get_trading_db_path
 from ..trading_contract import (
+    PRODUCTION_ADX_MAX_THRESHOLD,
     PRODUCTION_MAX_SL_PCT,
     PRODUCTION_MTF_EMA_PERIOD,
     PRODUCTION_SNIPER_LOOKBACK,
     PRODUCTION_SNIPER_PROXIMITY,
+    PRODUCTION_USE_ADX_MAX_FILTER,
     PRODUCTION_USE_DELTA_DIVERGENCE,
     PRODUCTION_USE_MAX_SL_VALIDATION,
     PRODUCTION_USE_MTF_TREND,
@@ -1268,8 +1270,10 @@ class DIContainer:
                     use_delta_divergence=PRODUCTION_USE_DELTA_DIVERGENCE,
                     use_mtf_trend=PRODUCTION_USE_MTF_TREND,
                     mtf_ema_period=PRODUCTION_MTF_EMA_PERIOD,
-                    sniper_lookback=15,      # v6.5.1: LB15 (was 20) — +59% PnL, +3.5pp WR
-                    sniper_proximity=0.025,  # v6.5.1: P2.5 (was 2.0) — PF 1.92, MaxDD -8.5%
+                    use_adx_max_filter=PRODUCTION_USE_ADX_MAX_FILTER,
+                    adx_max_threshold=PRODUCTION_ADX_MAX_THRESHOLD,
+                    sniper_lookback=PRODUCTION_SNIPER_LOOKBACK,
+                    sniper_proximity=PRODUCTION_SNIPER_PROXIMITY,
                 ),
                 # SOTA FIX: Inject market data repository for candle persistence
                 market_data_repository=self.get_market_data_repository(),

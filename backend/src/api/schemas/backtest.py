@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 from ...trading_contract import (
     PRODUCTION_AC_THRESHOLD_EXIT,
+    PRODUCTION_ADX_MAX_THRESHOLD,
     PRODUCTION_BLOCKED_WINDOWS_STR,
     PRODUCTION_CB_COOLDOWN_HOURS,
     PRODUCTION_CB_MAX_CONSECUTIVE_LOSSES,
@@ -23,6 +24,7 @@ from ...trading_contract import (
     PRODUCTION_SNIPER_LOOKBACK,
     PRODUCTION_SNIPER_PROXIMITY,
     PRODUCTION_USE_1M_MONITORING,
+    PRODUCTION_USE_ADX_MAX_FILTER,
     PRODUCTION_USE_DELTA_DIVERGENCE,
     PRODUCTION_USE_MAX_SL_VALIDATION,
     PRODUCTION_USE_MTF_TREND,
@@ -127,6 +129,15 @@ class BacktestRequest(BaseModel):
         PRODUCTION_MTF_EMA_PERIOD,
         ge=1,
         description="4h EMA period for MTF trend filter",
+    )
+    use_adx_max_filter: bool = Field(
+        PRODUCTION_USE_ADX_MAX_FILTER,
+        description="Block mean-reversion entries when ADX is too high",
+    )
+    adx_max_threshold: float = Field(
+        PRODUCTION_ADX_MAX_THRESHOLD,
+        gt=0.0,
+        description="ADX ceiling for mean-reversion entries",
     )
     sniper_lookback: int = Field(
         PRODUCTION_SNIPER_LOOKBACK,

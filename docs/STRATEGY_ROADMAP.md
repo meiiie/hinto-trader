@@ -17,6 +17,35 @@ This is useful infrastructure. It is not yet enough evidence for a durable
 trading edge. The current payoff profile can become "many small wins, fewer
 large losses" if it is promoted based on win rate alone.
 
+## May 2026 Paper Audit
+
+Four-day Binance Futures backtests were run with paper-like settings: 1m
+monitoring, maker/taker fees, funding, max four positions, 20x margin model,
+1% account-risk cap, MTF trend filter, and volume-delta divergence filter.
+
+Core 12-symbol result with the previous default (`AUTO_CLOSE` at `20% ROE`):
+
+- net return: `-14.73%`
+- trades: `37`
+- win rate: `37.84%`
+- average win/loss payoff: `0.79`
+- main failure cluster: late-US entries around `03:00-05:00 UTC+7`
+
+The issue was not only position sizing. Early auto-close compressed winners to
+about 1R, while stop losses plus fees and candle-close slippage were larger than
+1R. That made the payoff mathematically negative at the observed win rate.
+
+Paper-default adjustments after the audit:
+
+- disable early profitable auto-close by default;
+- keep the threshold at `40% ROE` for experiments that explicitly enable it;
+- add `03:00-05:00 UTC+7` to blocked windows;
+- enable the ADX max filter at `40` for the mean-reversion runtime path.
+
+After disabling auto-close and blocking `03:00-05:00`, the same core set
+improved to `-3.65%` over the four-day window, with max drawdown down to
+`9.04%`. This is better risk containment, not proof of edge.
+
 ## Research Tracks
 
 ### Track A: Mean-Reversion Scalper
