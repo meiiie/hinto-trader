@@ -22,6 +22,20 @@ view over the same trade CSV, experiment metadata, and `research_audit` gates.
 Use it to compare return, profit factor, expectancy, drawdown, bootstrap
 confidence, weak symbols, and exit reasons before creating a checkpoint.
 
+For multi-window checks, run:
+
+```bash
+python backend/scripts/run_walk_forward.py \
+  --window 2026-01-24:2026-02-24 \
+  --window 2026-02-24:2026-03-24 \
+  --symbols ETHUSDT,BNBUSDT,XRPUSDT \
+  --max-pos 3 --case bounce_daily2
+```
+
+The walk-forward report writes `walk_forward_*.json` and `walk_forward_*.md`.
+Treat a case with any rejected or negative window as not eligible for paper
+runtime changes.
+
 ```bash
 python backend/scripts/checkpoint_research.py backend/experiment_YYYYMMDD_HHMMSS_xxxxxx.json
 ```

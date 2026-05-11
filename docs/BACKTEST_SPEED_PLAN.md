@@ -27,6 +27,9 @@ research checks until pre-screening and cache warmup improve.
    JSON/Markdown summaries so weak cases are rejected by gates, not by memory.
    Use `--max-pos`, `--top`, `--balance`, `--risk`, and `--leverage` to match
    the intended paper profile instead of editing the script.
+   Use `scripts/run_walk_forward.py` when a strategy needs multiple windows;
+   it runs the matrix per window and writes one aggregate `walk_forward_*`
+   report with per-case stability decisions.
 3. Preload and validate cache coverage before a matrix starts so missing 1m
    data fails early. The checker validates both absolute cache min/max and the
    actual timestamps inside the requested window, so split caches such as a

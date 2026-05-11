@@ -213,40 +213,39 @@ def _run_case(case: ResearchCase, audit_runs: int) -> dict:
     }
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Run Hinto research matrix.")
-    parser.add_argument("--days", type=int, default=30)
-    parser.add_argument("--start", help="Start date YYYY-MM-DD. Must be paired with --end.")
-    parser.add_argument("--end", help="End date YYYY-MM-DD. Must be paired with --start.")
-    parser.add_argument("--symbols", help="Comma-separated symbol universe. Defaults to a dynamic top-N universe.")
-    parser.add_argument("--top", type=int, default=30, help="Dynamic top-N universe when --symbols is not provided.")
-    parser.add_argument("--balance", type=float, default=100.0)
-    parser.add_argument("--risk", type=float, default=0.01)
-    parser.add_argument("--leverage", type=float, default=20.0)
-    parser.add_argument("--max-pos", type=int, default=4)
-    parser.add_argument("--audit-runs", type=int, default=1000)
-    parser.add_argument("--case", action="append", help="Only run named case. Repeatable.")
-    args = parser.parse_args()
-
+def run_matrix(
+    *,
+    days: int | None,
+    start: str | None,
+    end: str | None,
+    symbols: str | None,
+    top: int,
+    balance: float,
+    risk: float,
+    leverage: float,
+    max_pos: int,
+    audit_runs: int,
+    case_names: list[str] | None = None,
+) -> dict:
     cases = _cases(
-        args.days,
-        args.start,
-        args.end,
-        args.symbols,
-        top=args.top,
-        balance=args.balance,
-        risk=args.risk,
-        leverage=args.leverage,
-        max_pos=args.max_pos,
+        days,
+        start,
+        end,
+        symbols,
+        top=top,
+        balance=balance,
+        risk=risk,
+        leverage=leverage,
+        max_pos=max_pos,
     )
-    if args.case:
-        wanted = set(args.case)
+    if case_names:
+        wanted = set(case_names)
         cases = [case for case in cases if case.name in wanted]
         missing = wanted - {case.name for case in cases}
         if missing:
-            raise SystemExit(f"Unknown case(s): {', '.join(sorted(missing))}")
+            raise ValueError(f"Unknown case(s): {', '.join(sorted(missing))}")
 
-    results = [_run_case(case, args.audit_runs) for case in cases]
+    results = [_run_case(case, audit_runs) for case in cases]
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     output = ROOT / f"research_matrix_{stamp}.json"
     scoreboard = build_scoreboard(results)
@@ -267,18 +266,49 @@ def main() -> None:
     )
     scoreboard_json.write_text(json.dumps(scoreboard, indent=2, ensure_ascii=False), encoding="utf-8")
     scoreboard_md.write_text(render_scoreboard_markdown(scoreboard), encoding="utf-8")
-    print(
-        json.dumps(
-            {
-                "output": output.name,
-                "scoreboard_json": scoreboard_json.name,
-                "scoreboard_markdown": scoreboard_md.name,
-                "scoreboard_summary": scoreboard["summary"],
-                "results": results,
-            },
-            indent=2,
-            ensure_ascii=False,
+    return {
+        "output": output.name,
+        "scoreboard_json": scoreboard_json.name,
+        "scoreboard_markdown": scoreboard_md.name,
+        "scoreboard_summary": scoreboard["summary"],
+        "results": results,
+    }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Run Hinto research matrix.")
+    parser.add_argument("--days", type=int, default=30)
+    parser.add_argument("--start", help="Start date YYYY-MM-DD. Must be paired with --end.")
+    parser.add_argument("--end", help="End date YYYY-MM-DD. Must be paired with --start.")
+    parser.add_argument("--symbols", help="Comma-separated symbol universe. Defaults to a dynamic top-N universe.")
+    parser.add_argument("--top", type=int, default=30, help="Dynamic top-N universe when --symbols is not provided.")
+    parser.add_argument("--balance", type=float, default=100.0)
+    parser.add_argument("--risk", type=float, default=0.01)
+    parser.add_argument("--leverage", type=float, default=20.0)
+    parser.add_argument("--max-pos", type=int, default=4)
+    parser.add_argument("--audit-runs", type=int, default=1000)
+    parser.add_argument("--case", action="append", help="Only run named case. Repeatable.")
+    args = parser.parse_args()
+
+    try:
+        report = run_matrix(
+            days=args.days,
+            start=args.start,
+            end=args.end,
+            symbols=args.symbols,
+            top=args.top,
+            balance=args.balance,
+            risk=args.risk,
+            leverage=args.leverage,
+            max_pos=args.max_pos,
+            audit_runs=args.audit_runs,
+            case_names=args.case,
         )
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+
+    print(
+        json.dumps(report, indent=2, ensure_ascii=False)
     )
 
 
