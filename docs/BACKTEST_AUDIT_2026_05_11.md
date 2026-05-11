@@ -195,6 +195,38 @@ This is the first non-rejected checkpoint. It is suitable only for paper-mode
 observation because the trade count is below `100`, and the 5th-percentile
 bootstrapped return can still dip slightly negative.
 
+## Runtime Parity Follow-Up
+
+Follow-up validation on 2026-05-11 fixed two reproducibility issues:
+
+- development config loading now skips `.env` directories and only accepts real
+  `.env` files;
+- `run_backtest.py` uses the same file-only `.env` rule and always writes
+  trade, equity, and experiment artifacts under `backend/`, independent of the
+  caller's current working directory.
+
+The 4-day smoke run for `ETHUSDT, BNBUSDT, XRPUSDT` produced only `4` trades:
+`+0.72%`, PF `1.27`, bootstrap positive-expectancy probability about `70%`,
+and decision `PAPER_ONLY_SMALL_SAMPLE`. This is useful only as a runtime parity
+smoke test, not strategy evidence.
+
+The full covered-window rerun after the parity fix produced the same strategy
+profile:
+
+- checkpoint hash: `33d4f1260aba`
+- universe: `ETHUSDT, BNBUSDT, XRPUSDT`
+- return: `+20.61%`
+- trades: `85`
+- PF: `1.38`
+- max drawdown: about `8.6%`
+- bootstrap positive-expectancy probability: about `93.4%`
+- bootstrap 5th-percentile return: about `-2.2%`
+- decision: `PAPER_ONLY_SMALL_SAMPLE`
+
+This supersedes the earlier local paper hash `c1b97eeaa869`. The strategy
+configuration did not improve; the checkpoint was refreshed because runtime and
+artifact reproducibility were fixed. It remains paper-only.
+
 Current paper-observation checkpoint experiment:
 
 ```bash
@@ -205,7 +237,7 @@ python backend/run_backtest.py \
   --bounce-confirm --daily-symbol-loss-limit 2
 ```
 
-Checkpoint hash: `c1b97eeaa869`.
+Checkpoint hash: `33d4f1260aba`.
 
 The wider major-universe experiment remains rejected after adding bootstrap
 expectancy checks:

@@ -19,6 +19,9 @@ import subprocess
 import sys
 from typing import Any, List, Dict, Tuple, Optional
 
+current_dir = os.path.dirname(os.path.abspath(__file__))
+repo_root = os.path.dirname(current_dir)
+
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 if hasattr(sys.stderr, "reconfigure"):
@@ -26,14 +29,26 @@ if hasattr(sys.stderr, "reconfigure"):
 
 # Load .env for BACKTEST_SYMBOLS / USE_FIXED_SYMBOLS
 from dotenv import load_dotenv
-_env_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
-if os.path.isdir(_env_dir):
-    load_dotenv(os.path.join(_env_dir, ".env"))
-else:
-    load_dotenv(_env_dir)
+
+
+def _load_backtest_env() -> Optional[str]:
+    candidates = [
+        os.path.join(os.getcwd(), ".env"),
+        os.path.join(os.getcwd(), os.pardir, ".env"),
+        os.path.join(current_dir, ".env"),
+        os.path.join(repo_root, ".env"),
+    ]
+    for candidate in candidates:
+        env_path = os.path.abspath(candidate)
+        if os.path.isfile(env_path):
+            load_dotenv(env_path)
+            return env_path
+    return None
+
+
+BACKTEST_ENV_PATH = _load_backtest_env()
 
 # Add src to path (Robust approach)
-current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
@@ -1856,10 +1871,15 @@ async def main():
     # 6. Export to CSV. Include microseconds so parallel research runs do not
     # overwrite each other, and reuse the same stamp for all artifacts.
     run_stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    csv_filename = f"portfolio_backtest_{run_stamp}.csv"
-    equity_filename = f"equity_curve_{run_stamp}.csv" if equity_curve else None
-    replay_filename = f"replay_data_{run_stamp}.json" if args.visual and result.get("replay_data") else None
-    metadata_filename = f"experiment_{run_stamp}.json"
+    artifact_dir = current_dir
+    csv_artifact = f"portfolio_backtest_{run_stamp}.csv"
+    equity_artifact = f"equity_curve_{run_stamp}.csv" if equity_curve else None
+    replay_artifact = f"replay_data_{run_stamp}.json" if args.visual and result.get("replay_data") else None
+    metadata_artifact = f"experiment_{run_stamp}.json"
+    csv_filename = os.path.join(artifact_dir, csv_artifact)
+    equity_filename = os.path.join(artifact_dir, equity_artifact) if equity_artifact else None
+    replay_filename = os.path.join(artifact_dir, replay_artifact) if replay_artifact else None
+    metadata_filename = os.path.join(artifact_dir, metadata_artifact)
 
     # SOTA: Load timezone offset from .env (default: 7 for Vietnam)
     try:
@@ -1973,9 +1993,9 @@ async def main():
             "created_at_utc": datetime.now(timezone.utc),
             "experiment_config": experiment_config,
             "artifacts": {
-                "trades_csv": csv_filename,
-                "equity_csv": equity_filename,
-                "replay_json": replay_filename,
+                "trades_csv": csv_artifact,
+                "equity_csv": equity_artifact,
+                "replay_json": replay_artifact,
             },
             "summary": {
                 "initial_balance": stats.get("initial_balance"),

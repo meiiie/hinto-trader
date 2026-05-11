@@ -70,7 +70,7 @@ def get_config_dir() -> Path:
             Path(__file__).parent.parent.parent / ".env",  # Relative to this file (project root)
         ]
         for candidate in candidates:
-            if candidate.exists():
+            if candidate.is_file():
                 logger.info(f"[ConfigLoader] Found .env at: {candidate}")
                 return candidate.parent
 
