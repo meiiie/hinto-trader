@@ -76,10 +76,13 @@ Major-universe follow-up:
 - removing MTF trend or delta-divergence filters from the broad candidate was
   strongly negative, so both filters remain part of the research contract.
 
-This becomes the strongest current paper candidate, but it is not live-ready.
-The sample is still far below 1,000 out-of-sample trades and one 30-day
-walk-forward window was blocked by missing 1m data coverage rather than forced
-through with incomplete intrabar information.
+After bootstrap expectancy checks, this is better described as the strongest
+current paper experiment, not a candidate for promotion. Its bootstrap
+positive-expectancy probability was about `85%`, below the `90%` research gate,
+and the 5th-percentile bootstrapped return was still negative. The sample is
+far below 1,000 out-of-sample trades and one 30-day walk-forward window was
+blocked by missing 1m data coverage rather than forced through with incomplete
+intrabar information.
 
 ## Research Tracks
 
@@ -102,7 +105,7 @@ Kill criteria:
 - more than 40% of profit comes from one symbol cluster or one market regime;
 - drawdown recovers only by increasing leverage or widening stops.
 
-Current paper candidate:
+Current paper experiment:
 
 ```bash
 python backend/run_backtest.py \
@@ -112,10 +115,10 @@ python backend/run_backtest.py \
   --bounce-confirm --daily-symbol-loss-limit 2
 ```
 
-Keep the broad fixed universe as a benchmark, not the primary candidate. Do not
-add symbol-side quarantine or broad hour exclusions to production based on the
-current sample. They either reduced returns or looked like sample-specific curve
-fitting.
+Keep the broad fixed universe as a benchmark, not the primary experiment. Do
+not add symbol-side quarantine or broad hour exclusions to production based on
+the current sample. They either reduced returns or looked like sample-specific
+curve fitting.
 
 ### Track B: Positive-Skew Trend Runner
 

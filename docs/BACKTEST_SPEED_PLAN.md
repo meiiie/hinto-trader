@@ -36,6 +36,8 @@ Research promotion requires more than PnL:
 - positive expectancy in R-multiple terms;
 - profit factor above `1.20` for a paper candidate and above `1.30` for
   promotion discussions;
+- bootstrap positive-expectancy probability above `90%` for a research
+  candidate and above `95%` for promotion review;
 - walk-forward windows should not depend on one isolated period;
 - Monte Carlo shuffled drawdown must stay survivable;
 - data coverage gaps must fail closed, especially when 1m intrabar monitoring

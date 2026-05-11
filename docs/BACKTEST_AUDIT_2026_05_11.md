@@ -150,8 +150,8 @@ Symbol-universe test:
 
 - 60-day major universe (`BTC, ETH, BNB, SOL, XRP`): `+20.1%`, PF `1.45`,
   only `78` trades, paper-only due to sample size
-- 120-day major universe: `+17.7%`, PF `1.21`, `126` trades, candidate for
-  more paper research
+- 120-day major universe: `+17.7%`, PF `1.21`, `126` trades, initially
+  interesting but rejected by stricter bootstrap gate
 - 120-day same major universe without bounce filter: `-22.9%`, PF `0.86`,
   reject
 
@@ -176,10 +176,17 @@ python backend/run_backtest.py \
   --bounce-confirm --daily-symbol-loss-limit 2
 ```
 
-This is still not live approval. The sample is only `126` trades, below the
-long-run promotion rule. It is a stronger paper candidate than the broad
-universe because it avoids weaker altcoin behavior and retains the filters that
-survived ablation.
+After adding bootstrap expectancy checks, this is still not a robust candidate:
+
+- bootstrap positive-expectancy probability: about `85%`
+- bootstrap 5th-percentile expectancy: about `-0.08` per trade
+- bootstrap 5th-percentile return: about `-10.2%`
+- decision: reject for promotion, keep as a paper experiment only
+
+The sample is only `126` trades, below the long-run promotion rule. It is a
+stronger experiment than the broad universe because it avoids weaker altcoin
+behavior and retains the filters that survived ablation, but it is not yet
+mathematically stable enough to call "good".
 
 Parallel-run note: `run_backtest.py` now writes output artifacts with
 microsecond timestamps and reuses one run stamp for trade, equity, and replay

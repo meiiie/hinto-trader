@@ -135,6 +135,49 @@ def _monte_carlo_drawdown(
     }
 
 
+def _bootstrap_expectancy(
+    trades: list[TradeRow],
+    initial_balance: float,
+    runs: int,
+    seed: int,
+) -> dict:
+    if not trades or runs <= 0:
+        return {"runs": 0}
+
+    rng = random.Random(seed + 10_000)
+    pnls = [t.pnl for t in trades]
+    means = []
+    returns = []
+    positive = 0
+    n = len(pnls)
+    for _ in range(runs):
+        sample = [pnls[rng.randrange(n)] for _ in range(n)]
+        sample_pnl = sum(sample)
+        mean = sample_pnl / n
+        means.append(mean)
+        returns.append(sample_pnl / initial_balance * 100 if initial_balance else 0.0)
+        if mean > 0:
+            positive += 1
+
+    means.sort()
+    returns.sort()
+
+    def percentile(values: list[float], pct: float) -> float:
+        if not values:
+            return 0.0
+        index = min(len(values) - 1, max(0, round((pct / 100) * (len(values) - 1))))
+        return values[index]
+
+    return {
+        "runs": runs,
+        "positive_expectancy_prob": round(positive / runs, 4),
+        "expectancy_p05": round(percentile(means, 5), 4),
+        "expectancy_p50": round(percentile(means, 50), 4),
+        "return_p05_pct": round(percentile(returns, 5), 2),
+        "return_p50_pct": round(percentile(returns, 50), 2),
+    }
+
+
 def audit_trades(
     trades: list[TradeRow],
     *,
@@ -162,11 +205,28 @@ def audit_trades(
     win_rate = len(wins) / len(trades)
     max_dd = _max_drawdown_from_pnls(initial_balance, [t.pnl for t in trades]) * 100
 
+    bootstrap = _bootstrap_expectancy(trades, initial_balance, monte_carlo_runs, seed)
+    positive_prob = float(bootstrap.get("positive_expectancy_prob", 0.0) or 0.0)
+
     decision = "REJECT"
     if expectancy > 0 and profit_factor >= 1.0 and len(trades) < 100:
         decision = "PAPER_ONLY_SMALL_SAMPLE"
-    elif profit_factor >= 1.2 and expectancy > 0 and payoff >= 1.2:
-        decision = "CANDIDATE"
+    elif (
+        len(trades) < 1000
+        and profit_factor >= 1.2
+        and expectancy > 0
+        and payoff >= 1.2
+        and positive_prob >= 0.90
+    ):
+        decision = "PAPER_RESEARCH_CANDIDATE_NEEDS_OOS"
+    elif (
+        len(trades) >= 1000
+        and profit_factor >= 1.3
+        and expectancy > 0
+        and payoff >= 1.2
+        and positive_prob >= 0.95
+    ):
+        decision = "PROMOTION_CANDIDATE_REVIEW_REQUIRED"
 
     return {
         "trades": len(trades),
@@ -186,6 +246,7 @@ def audit_trades(
         "worst_symbols": _group_breakdown(trades, lambda t: t.symbol)[:8],
         "worst_entry_hours": _group_breakdown(trades, lambda t: f"{t.entry_time.hour:02d}:00")[:8],
         "monte_carlo": _monte_carlo_drawdown(trades, initial_balance, monte_carlo_runs, seed),
+        "bootstrap": bootstrap,
         "decision": decision,
     }
 
