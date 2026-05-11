@@ -22,7 +22,15 @@ if str(ROOT) not in sys.path:
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from src.trading_contract import clamp_runtime_leverage
+from src.trading_contract import (
+    PRODUCTION_ADX_MAX_THRESHOLD,
+    PRODUCTION_SNIPER_LOOKBACK,
+    PRODUCTION_SNIPER_PROXIMITY,
+    PRODUCTION_USE_ADX_MAX_FILTER,
+    PRODUCTION_USE_DELTA_DIVERGENCE,
+    PRODUCTION_USE_MTF_TREND,
+    clamp_runtime_leverage,
+)
 from research_audit import audit_trades, load_trades
 CHECKPOINT_DIR = ROOT / "research_checkpoints"
 PAPER_RESEARCH_DECISIONS = {
@@ -30,6 +38,60 @@ PAPER_RESEARCH_DECISIONS = {
     "PAPER_RESEARCH_CANDIDATE_NEEDS_OOS",
     "PROMOTION_CANDIDATE_REVIEW_REQUIRED",
 }
+UNSUPPORTED_PAPER_SUGGESTION_FLAGS = (
+    "adx_regime_filter",
+    "atr_sl",
+    "bb_filter",
+    "dynamic_tp",
+    "fix_vwap",
+    "funding_filter",
+    "regime_filter",
+    "stochrsi_filter",
+    "vol_sizing",
+    "volume_confirm",
+)
+
+
+def _has_unsupported_paper_suggestion_args(args: dict) -> bool:
+    """Return True when a research run cannot be represented by paper settings."""
+    for flag in UNSUPPORTED_PAPER_SUGGESTION_FLAGS:
+        if args.get(flag):
+            return True
+
+    if (
+        args.get("adx_max_filter") is not None
+        and bool(args.get("adx_max_filter")) != PRODUCTION_USE_ADX_MAX_FILTER
+    ):
+        return True
+    if (
+        args.get("adx_max_threshold") is not None
+        and float(args.get("adx_max_threshold")) != PRODUCTION_ADX_MAX_THRESHOLD
+    ):
+        return True
+    if (
+        args.get("delta_divergence") is not None
+        and bool(args.get("delta_divergence")) != PRODUCTION_USE_DELTA_DIVERGENCE
+    ):
+        return True
+    if (
+        args.get("mtf_trend") is not None
+        and bool(args.get("mtf_trend")) != PRODUCTION_USE_MTF_TREND
+    ):
+        return True
+    if (
+        args.get("sniper_lookback") is not None
+        and int(args.get("sniper_lookback")) != PRODUCTION_SNIPER_LOOKBACK
+    ):
+        return True
+    if args.get("sniper_proximity") is not None:
+        proximity = float(args.get("sniper_proximity"))
+        # CLI stores percent units, while the production contract stores a decimal.
+        if proximity > 1:
+            proximity /= 100.0
+        if proximity != PRODUCTION_SNIPER_PROXIMITY:
+            return True
+
+    return False
 
 
 def _paper_env_suggestion(metadata: dict, audit: dict) -> dict | None:
@@ -39,6 +101,9 @@ def _paper_env_suggestion(metadata: dict, audit: dict) -> dict | None:
 
     config = metadata.get("experiment_config", {})
     args = config.get("args", {})
+    if _has_unsupported_paper_suggestion_args(args):
+        return None
+
     symbols = config.get("eligible_symbols") or config.get("symbols") or config.get("requested_symbols") or []
 
     return {
@@ -96,7 +161,7 @@ def create_checkpoint(metadata_path: str | Path, *, audit_runs: int, seed: int) 
     }
 
     CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
     output = CHECKPOINT_DIR / f"checkpoint_{stamp}_{metadata.get('config_hash', 'unknown')}.json"
     output.write_text(json.dumps(checkpoint, indent=2, ensure_ascii=False), encoding="utf-8")
     return {"checkpoint": output.name, **checkpoint}

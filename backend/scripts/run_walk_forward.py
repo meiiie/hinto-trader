@@ -255,7 +255,7 @@ def main() -> None:
         )
 
     report = build_walk_forward_report(window_reports)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
     output_json = ROOT / f"walk_forward_{stamp}.json"
     output_md = ROOT / f"walk_forward_{stamp}.md"
     output_json.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")

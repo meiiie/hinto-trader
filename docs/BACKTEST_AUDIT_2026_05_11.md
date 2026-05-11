@@ -509,12 +509,65 @@ observation because it has lower drawdown than baseline and survived the
 short-window stability check better, even though the 30-day baseline slice had
 higher headline return. Do not expand to 10 tokens yet.
 
+## ADX30 Strategy Variant Follow-Up
+
+Additional strategy variants were added to the research matrix without changing
+Paper runtime:
+
+- `bounce_ema_regime`: bounce/daily2 plus EMA 9/21 counter-trend block;
+- `bounce_adx30`: bounce/daily2 with a stricter ADX max threshold of `30`;
+- `bounce_bb_stoch`: Bollinger-band and StochRSI confluence;
+- `bounce_confluence`: EMA regime + ADX30 + Bollinger + StochRSI;
+- `bounce_atr_sl`: ATR stop variant;
+- `trend_runner_daily2`: positive-skew trend runner plus daily loss limit.
+
+Worst historical 6-month ETH window, `2024-05-11 -> 2024-11-11`, `2x`:
+
+| Case | Return | Trades | PF | Max DD | Boot+ | Decision |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `bounce_daily2` | `-3.29%` | `56` | `0.87` | `8.50%` | `31.0%` | `REJECT` |
+| `bounce_adx30` | `+0.54%` | `28` | `1.05` | `7.31%` | `51.2%` | `PAPER_ONLY_SMALL_SAMPLE` |
+| `trend_runner` | `+0.41%` | `25` | `1.05` | `5.33%` | `51.8%` | `PAPER_ONLY_SMALL_SAMPLE` |
+
+Two-year ETH window, `2024-05-11 -> 2026-05-11`, `2x`:
+
+| Case | Return | Trades | PF | Max DD | Boot+ | Decision |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `bounce_daily2` | `+10.71%` | `201` | `1.12` | `10.85%` | `78.6%` | `REJECT` |
+| `bounce_adx30` | `+11.68%` | `110` | `1.27` | `7.63%` | `87.6%` | `REJECT` |
+| `trend_runner` | `-0.77%` | `109` | `0.98` | `7.96%` | `46.6%` | `REJECT` |
+
+Recent 6-month paper universe, `2025-11-11 -> 2026-05-11`, `2x`:
+
+| Case | Return | Trades | PF | Max DD | Boot+ | Decision |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `bounce_daily2` | `+16.84%` | `95` | `1.48` | `4.59%` | `97.6%` | `PAPER_ONLY_SMALL_SAMPLE` |
+| `bounce_adx30` | `+11.22%` | `58` | `1.53` | `3.87%` | `95.4%` | `PAPER_ONLY_SMALL_SAMPLE` |
+| `bounce_time_shield` | `+13.42%` | `42` | `2.04` | `2.21%` | `98.4%` | `PAPER_ONLY_SMALL_SAMPLE` |
+
+Seven rolling 6-month ETH windows over the 2-year span:
+
+| Case | Positive windows | Avg return | Worst return | Max DD | Trades | Decision |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `bounce_adx30` | `5/7` | `+1.89%` | `-3.44%` | `7.41%` | `191` | `REJECT` |
+| `bounce_daily2` | `3/7` | `+2.15%` | `-3.29%` | `8.91%` | `351` | `REJECT` |
+
+Interpretation: `bounce_adx30` is the best new research lead. It reduces
+drawdown and improves profit factor on the 2-year ETH study, but it still has
+two rejected rolling windows and does not meet the bootstrap gate. It should
+not be applied to Paper yet. A local checkpoint was created for the recent
+6-month `bounce_adx30` run, config hash `44eeec561da1`, with
+`paper_env_suggestion: null` because ADX30 is a research-only threshold that is
+not currently represented as a safe Paper runtime setting.
+
 ## Next Research Steps
 
 - collect at least 200 paper/backtest-comparable trades before promoting any
   setting;
 - keep the best current candidate as paper-only:
   `--bounce-confirm --daily-symbol-loss-limit 2`;
+- keep `bounce_adx30` as the next regime-filter candidate, but require it to
+  pass walk-forward before adding any Paper runtime control for ADX threshold;
 - use the generated `experiment_*.json` metadata to compare future runs by
   config hash instead of screenshots or memory;
 - create `backend/research_checkpoints/checkpoint_*.json` for notable results;

@@ -70,3 +70,18 @@ def test_research_matrix_contains_guard_variants():
     assert "09:00-11:00" in " ".join(cases["bounce_time_shield"])
     assert "bounce_btc_impulse" in cases
     assert "--btc-impulse-filter" in cases["bounce_btc_impulse"]
+    assert "bounce_ema_regime" in cases
+    assert "--regime-filter" in cases["bounce_ema_regime"]
+    assert "bounce_adx30" in cases
+    assert cases["bounce_adx30"][cases["bounce_adx30"].index("--adx-max-threshold") + 1] == "30"
+    assert "bounce_bb_stoch" in cases
+    assert "--bb-filter" in cases["bounce_bb_stoch"]
+    assert "--stochrsi-filter" in cases["bounce_bb_stoch"]
+    assert "bounce_confluence" in cases
+    assert "--regime-filter" in cases["bounce_confluence"]
+    assert "--bb-filter" in cases["bounce_confluence"]
+    assert "bounce_atr_sl" in cases
+    assert "--atr-sl" in cases["bounce_atr_sl"]
+    assert "trend_runner_daily2" in cases
+    assert "--strategy-id" in cases["trend_runner_daily2"]
+    assert "--daily-symbol-loss-limit" in cases["trend_runner_daily2"]

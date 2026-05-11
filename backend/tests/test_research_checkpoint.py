@@ -48,6 +48,25 @@ def test_non_rejected_checkpoint_builds_reviewable_paper_env_suggestion():
     assert suggestion["PAPER_BLOCKED_WINDOWS_ENABLED"] == "true"
 
 
+def test_non_rejected_checkpoint_skips_unsupported_research_flags():
+    metadata = {
+        "config_hash": "abc123",
+        "experiment_config": {
+            "args": {
+                "strategy_id": "liquidity_sniper_mean_reversion",
+                "max_pos": 3,
+                "adx_max_threshold": 30.0,
+            },
+            "symbols": ["ETHUSDT"],
+        },
+    }
+
+    assert _paper_env_suggestion(
+        metadata,
+        {"decision": "PAPER_ONLY_SMALL_SAMPLE"},
+    ) is None
+
+
 def test_checkpoint_prefers_eligible_symbols_over_requested_symbols():
     metadata = {
         "config_hash": "abc123",

@@ -126,3 +126,9 @@ symbols, risk, and max positions into the paper SQLite settings DB. SharkTank
 cooldown handling was also corrected so runtime defers near-cooldown batches
 instead of discarding them. Paper-real is active with local simulated orders
 only; real exchange ordering remains disabled.
+
+The `bounce_adx30` follow-up produced local checkpoint
+`checkpoint_20260511_130839_766203_44eeec561da1.json` from the recent
+6-month paper-universe run. It intentionally has no `paper_env_suggestion`
+because the ADX `30` threshold is not yet represented as a safe Paper runtime
+setting. Treat it as research evidence only; do not apply it to Paper.

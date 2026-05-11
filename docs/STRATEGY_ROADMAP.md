@@ -120,6 +120,25 @@ The 2x retest supports a narrow paper universe only:
 Current interpretation: `2x + ETH/BNB/XRP + bounce confirmation + daily
 symbol loss limit` is acceptable for paper observation, not live promotion.
 
+Follow-up strategy research added a stricter mean-reversion regime branch:
+`bounce_adx30`, which keeps the same bounce/daily-loss contract but blocks
+signals when ADX is above `30` instead of the production `40`.
+
+Summary of the latest checks:
+
+- worst 6-month ETH window: `bounce_adx30` improved `bounce_daily2` from about
+  `-3.3%` to about `+0.5%`, but only with `28` trades;
+- full 2-year ETH window: `bounce_adx30` improved PF from about `1.12` to
+  `1.27` and reduced drawdown from about `10.9%` to `7.6%`, but bootstrap
+  positive expectancy was still below the `90%` gate;
+- seven rolling 6-month ETH windows: `bounce_adx30` was positive in `5/7`
+  windows versus `3/7` for `bounce_daily2`, but both remain rejected because
+  at least one window is materially negative.
+
+Decision: `bounce_adx30` is a research candidate, not a Paper runtime update.
+Do not lower the production ADX threshold until it survives walk-forward gates
+and the runtime has an explicit, reviewed Paper setting for that threshold.
+
 ## Research Tracks
 
 ### Track A: Mean-Reversion Scalper
@@ -149,6 +168,21 @@ python backend/run_backtest.py \
   --days 120 --balance 100 --risk 0.01 --leverage 2 \
   --max-pos 3 --no-compound --full-tp --maker-orders \
   --bounce-confirm --daily-symbol-loss-limit 2
+```
+
+Current research candidate:
+
+```bash
+python backend/scripts/run_walk_forward.py \
+  --symbols ETHUSDT --balance 100 --risk 0.01 --leverage 2 \
+  --max-pos 3 --case bounce_daily2 --case bounce_adx30 \
+  --window 2024-05-11:2024-11-11 \
+  --window 2024-08-11:2025-02-11 \
+  --window 2024-11-11:2025-05-11 \
+  --window 2025-02-11:2025-08-11 \
+  --window 2025-05-11:2025-11-11 \
+  --window 2025-08-11:2026-02-11 \
+  --window 2025-11-11:2026-05-11
 ```
 
 Keep the broad fixed universe as a benchmark, not the primary experiment. Do

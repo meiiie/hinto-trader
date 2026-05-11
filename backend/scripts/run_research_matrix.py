@@ -27,6 +27,7 @@ except ModuleNotFoundError:
     from .research_audit import audit_trades, load_trades
     from .research_scoreboard import build_scoreboard, render_scoreboard_markdown
 
+from src.application.signals.strategy_ids import TREND_RUNNER_STRATEGY_ID
 from src.trading_contract import PRODUCTION_LEVERAGE
 
 
@@ -160,8 +161,64 @@ def _cases(
             tuple([*base, "--bounce-confirm", "--daily-symbol-loss-limit", "2", "--btc-impulse-filter"]),
         ),
         ResearchCase(
+            "bounce_ema_regime",
+            tuple([*base, "--bounce-confirm", "--daily-symbol-loss-limit", "2", "--regime-filter"]),
+        ),
+        ResearchCase(
+            "bounce_adx30",
+            tuple(
+                [
+                    *base,
+                    "--bounce-confirm",
+                    "--daily-symbol-loss-limit",
+                    "2",
+                    "--adx-max-filter",
+                    "--adx-max-threshold",
+                    "30",
+                ]
+            ),
+        ),
+        ResearchCase(
+            "bounce_bb_stoch",
+            tuple(
+                [
+                    *base,
+                    "--bounce-confirm",
+                    "--daily-symbol-loss-limit",
+                    "2",
+                    "--bb-filter",
+                    "--stochrsi-filter",
+                ]
+            ),
+        ),
+        ResearchCase(
+            "bounce_confluence",
+            tuple(
+                [
+                    *base,
+                    "--bounce-confirm",
+                    "--daily-symbol-loss-limit",
+                    "2",
+                    "--regime-filter",
+                    "--adx-max-filter",
+                    "--adx-max-threshold",
+                    "30",
+                    "--bb-filter",
+                    "--stochrsi-filter",
+                ]
+            ),
+        ),
+        ResearchCase(
+            "bounce_atr_sl",
+            tuple([*base, "--bounce-confirm", "--daily-symbol-loss-limit", "2", "--atr-sl"]),
+        ),
+        ResearchCase(
             "trend_runner",
-            tuple([*base, "--strategy-id", "liquidity_reclaim_trend_runner"]),
+            tuple([*base, "--strategy-id", TREND_RUNNER_STRATEGY_ID]),
+        ),
+        ResearchCase(
+            "trend_runner_daily2",
+            tuple([*base, "--strategy-id", TREND_RUNNER_STRATEGY_ID, "--daily-symbol-loss-limit", "2"]),
         ),
         ResearchCase(
             "bounce_no_mtf",
@@ -305,7 +362,7 @@ def run_matrix(
         _run_case(case, audit_runs, initial_balance=balance, risk_percent=risk)
         for case in cases
     ]
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
     output = ROOT / f"research_matrix_{stamp}.json"
     scoreboard = build_scoreboard(results)
     scoreboard_json = ROOT / f"research_scoreboard_{stamp}.json"
