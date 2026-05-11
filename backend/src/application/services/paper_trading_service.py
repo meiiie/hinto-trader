@@ -283,6 +283,35 @@ class PaperTradingService:
 
         return max(0.0, margin_balance - used_margin)
 
+    def _calculate_risk_capped_notional(
+        self,
+        wallet_balance: float,
+        allocated_capital: float,
+        entry_price: float,
+        stop_loss: float,
+    ) -> float:
+        """
+        Calculate order notional from slot allocation and account-risk cap.
+
+        Slot allocation caps margin usage. The risk cap makes risk_percent mean
+        the intended maximum loss at stop-loss, which is the safer paper behavior
+        for small accounts.
+        """
+        max_notional_by_margin = allocated_capital * self.LEVERAGE
+
+        if entry_price <= 0 or stop_loss <= 0 or self.RISK_PER_TRADE <= 0:
+            return max_notional_by_margin
+
+        stop_distance = abs(entry_price - stop_loss)
+        if stop_distance <= 0:
+            return max_notional_by_margin
+
+        stop_distance_pct = stop_distance / entry_price
+        risk_budget = wallet_balance * self.RISK_PER_TRADE
+        max_notional_by_risk = risk_budget / stop_distance_pct
+
+        return min(max_notional_by_margin, max_notional_by_risk)
+
     def on_signal_received(self, signal: TradingSignal, symbol: str = "BTCUSDT") -> None:
         """
         Handle new trading signal.
@@ -372,13 +401,19 @@ class PaperTradingService:
         # entry_price already computed above
         if entry_price <= 0: return
 
-        # Calculate notional and margin based on Pod allocation
-        position_size_usd = allocated_capital * self.LEVERAGE
-        margin_required = allocated_capital
+        stop_loss = signal.stop_loss if signal.stop_loss else 0.0
+
+        # Calculate notional with a real account-risk cap.
+        position_size_usd = self._calculate_risk_capped_notional(
+            wallet_balance=wallet_balance,
+            allocated_capital=allocated_capital,
+            entry_price=entry_price,
+            stop_loss=stop_loss,
+        )
+        margin_required = position_size_usd / self.LEVERAGE
 
         # Calculate quantity from notional
         quantity = position_size_usd / entry_price
-        stop_loss = signal.stop_loss if signal.stop_loss else 0.0
 
         # SOTA (Jan 2026): Validate min_notional (Match Backtest)
         MIN_NOTIONAL = 5.0  # $5 minimum (Binance standard)
