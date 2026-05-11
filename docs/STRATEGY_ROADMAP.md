@@ -153,6 +153,30 @@ Decision: `bounce_adx30` is a research candidate, not a Paper runtime update.
 Do not lower the production ADX threshold until it survives walk-forward gates
 and the runtime has an explicit, reviewed Paper setting for that threshold.
 
+## Monthly Return Target Check
+
+The `10%` monthly target was tested separately in
+`docs/MONTHLY_TARGET_RESEARCH_2026_05_11.md`.
+
+Result: not achieved.
+
+Key findings:
+
+- current Paper universe `ETH/BNB/XRP` with `bounce_daily2` averaged about
+  `+3.5%` per tested month after repairing 1m coverage;
+- adding `SOL` made `bounce_time_shield` stable across `6/6` monthly windows,
+  but average return was about `+3.4%`, with only `76` trades;
+- increasing `risk` from `1%` to `2%` did not change results because sizing was
+  margin-slot constrained at `2x`;
+- reducing `max-pos` concentrated capital and raised headline averages, but
+  introduced rejected months;
+- the current `trend_runner` positive-skew implementation was rejected across
+  the same monthly windows.
+
+Decision: keep the `10%` target as a research objective, not a Paper runtime
+claim. The next useful work is a real observe-only regime router plus a new
+trend-mode entry design, not another small threshold tweak.
+
 ## Research Tracks
 
 ### Track A: Mean-Reversion Scalper
