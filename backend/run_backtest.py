@@ -138,6 +138,13 @@ def _stable_config_hash(config: Dict[str, Any]) -> str:
     payload = json.dumps(config, sort_keys=True, default=_json_default, ensure_ascii=True)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
 
+
+def _research_config_hash(config: Dict[str, Any]) -> str:
+    # Code commit is trace metadata. Keeping it out prevents a docs/code commit
+    # from changing the paper checkpoint hash when strategy inputs are identical.
+    hash_config = {k: v for k, v in config.items() if k != "git_commit"}
+    return _stable_config_hash(hash_config)
+
 # Setup logging
 logging.basicConfig(
     level=logging.INFO, # Reveal Data Loader progress
@@ -1989,7 +1996,7 @@ async def main():
         }
         metadata = {
             "run_stamp": run_stamp,
-            "config_hash": _stable_config_hash(experiment_config),
+            "config_hash": _research_config_hash(experiment_config),
             "created_at_utc": datetime.now(timezone.utc),
             "experiment_config": experiment_config,
             "artifacts": {
