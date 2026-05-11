@@ -1959,7 +1959,8 @@ async def main():
         experiment_config = {
             "argv": sys.argv[1:],
             "args": vars(args),
-            "symbols": symbols,
+            "requested_symbols": symbols,
+            "eligible_symbols": result.get("symbols", []),
             "blocked_symbol_sides": blocked_symbol_sides,
             "start_time_utc": start_time,
             "end_time_utc": end_time,

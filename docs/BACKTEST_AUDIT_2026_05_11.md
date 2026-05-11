@@ -166,7 +166,21 @@ The `2026-02-10 -> 2026-03-12` window was rejected by the backtest engine due
 to a 1m cache coverage gap for `BNBUSDT`. This is the correct behavior:
 paper-like backtests must fail closed when intrabar SL/TP data is incomplete.
 
-Current best research candidate:
+Coverage note: an explicit cache check showed `BTCUSDT` 1m coverage starts at
+`2026-01-23T17:00:00Z`, so 120-day runs starting `2026-01-10T17:00:00Z` do
+not have full BTC 1m coverage. Those runs reported four eligible symbols and
+one quality rejection. Treat them as covered `ETH/BNB/SOL/XRP` experiments
+unless BTC 1m data is backfilled or the start date is moved later.
+
+A later coverage-safe run from `2026-01-24 -> 2026-05-11` passed explicit 1m
+and 15m coverage checks for all requested symbols, but the quality filter still
+reported four eligible symbols and one rejection. Its result remained
+statistically rejected: `+15.6%`, PF `1.21`, `112` trades, bootstrap
+positive-expectancy probability about `83.5%`, 5th-percentile return about
+`-10.6%`. Future metadata records both requested and eligible symbols so
+checkpoints cannot confuse the two universes.
+
+Current best research experiment:
 
 ```bash
 python backend/run_backtest.py \

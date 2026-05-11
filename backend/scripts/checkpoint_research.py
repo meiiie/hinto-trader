@@ -12,11 +12,14 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from research_audit import audit_trades, load_trades
-
 
 ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = ROOT.parent
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in __import__("sys").path:
+    __import__("sys").path.insert(0, str(SCRIPT_DIR))
+
+from research_audit import audit_trades, load_trades
 CHECKPOINT_DIR = ROOT / "research_checkpoints"
 PAPER_RESEARCH_DECISIONS = {
     "PAPER_ONLY_SMALL_SAMPLE",
@@ -32,7 +35,7 @@ def _paper_env_suggestion(metadata: dict, audit: dict) -> dict | None:
 
     config = metadata.get("experiment_config", {})
     args = config.get("args", {})
-    symbols = config.get("symbols") or []
+    symbols = config.get("eligible_symbols") or config.get("symbols") or config.get("requested_symbols") or []
 
     return {
         "ENV": "paper",

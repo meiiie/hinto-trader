@@ -21,6 +21,11 @@ The checkpoint is written to `backend/research_checkpoints/` and ignored by Git.
 Checkpoints may include `paper_env_suggestion` only when the audit decision is
 not `REJECT`. The script never mutates `.env` automatically.
 
+When metadata includes both `requested_symbols` and `eligible_symbols`, paper
+suggestions use `eligible_symbols`. This prevents a runtime paper config from
+including symbols that were excluded by coverage or quality gates during the
+research run.
+
 Paper mode can be adjusted only after reviewing:
 
 - 1m data coverage and fail-closed behavior;

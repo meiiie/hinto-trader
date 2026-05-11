@@ -21,7 +21,14 @@ paper/live behavior. That realism is worth keeping for final acceptance tests.
 2. Use `scripts/run_research_matrix.py` to standardize experiment execution and
    prevent ad hoc result picking.
 3. Preload and validate cache coverage before a matrix starts so missing 1m
-   data fails early.
+   data fails early:
+
+```bash
+python backend/scripts/check_backtest_coverage.py \
+  --symbols BTCUSDT,ETHUSDT,BNBUSDT,SOLUSDT,XRPUSDT \
+  --start 2026-01-11 --end 2026-05-11 --strict
+```
+
 4. Add a fast pre-screen layer later:
    - vectorized pandas/NumPy signal generation for candidate timestamps;
    - optional Numba kernels for indicator sweeps;

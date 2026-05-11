@@ -84,6 +84,15 @@ far below 1,000 out-of-sample trades and one 30-day walk-forward window was
 blocked by missing 1m data coverage rather than forced through with incomplete
 intrabar information.
 
+Coverage also matters for interpreting the 120-day major-universe result:
+`BTCUSDT` 1m cache coverage starts after the requested 120-day window, so the
+engine reported one quality rejection. Until that data is backfilled, treat the
+result as a four-symbol covered experiment rather than a fully covered five-
+symbol study.
+
+Experiment metadata now stores requested and eligible symbols separately, and
+checkpoint paper suggestions use eligible symbols only.
+
 Stress checks did not rescue the decision: taker-fee/no-maker and `0.02%`
 fill-buffer stress variants stayed profitable in headline PnL, but their
 bootstrap positive-expectancy probabilities were still only about `83-84%`.
