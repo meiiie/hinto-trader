@@ -23,7 +23,8 @@ research checks until pre-screening and cache warmup improve.
 
 1. Keep event-driven simulation as the final gate.
 2. Use `scripts/run_research_matrix.py` to standardize experiment execution and
-   prevent ad hoc result picking.
+   prevent ad hoc result picking. Matrix runs now emit `research_scoreboard_*`
+   JSON/Markdown summaries so weak cases are rejected by gates, not by memory.
 3. Preload and validate cache coverage before a matrix starts so missing 1m
    data fails early:
 

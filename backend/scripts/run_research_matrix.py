@@ -16,7 +16,12 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from research_audit import audit_trades, load_trades
+try:
+    from research_audit import audit_trades, load_trades
+    from research_scoreboard import build_scoreboard, render_scoreboard_markdown
+except ModuleNotFoundError:
+    from .research_audit import audit_trades, load_trades
+    from .research_scoreboard import build_scoreboard, render_scoreboard_markdown
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -197,8 +202,37 @@ def main() -> None:
     results = [_run_case(case, args.audit_runs) for case in cases]
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     output = ROOT / f"research_matrix_{stamp}.json"
-    output.write_text(json.dumps({"results": results}, indent=2, ensure_ascii=False), encoding="utf-8")
-    print(json.dumps({"output": output.name, "results": results}, indent=2, ensure_ascii=False))
+    scoreboard = build_scoreboard(results)
+    scoreboard_json = ROOT / f"research_scoreboard_{stamp}.json"
+    scoreboard_md = ROOT / f"research_scoreboard_{stamp}.md"
+
+    output.write_text(
+        json.dumps(
+            {
+                "results": results,
+                "scoreboard_json": scoreboard_json.name,
+                "scoreboard_markdown": scoreboard_md.name,
+            },
+            indent=2,
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    scoreboard_json.write_text(json.dumps(scoreboard, indent=2, ensure_ascii=False), encoding="utf-8")
+    scoreboard_md.write_text(render_scoreboard_markdown(scoreboard), encoding="utf-8")
+    print(
+        json.dumps(
+            {
+                "output": output.name,
+                "scoreboard_json": scoreboard_json.name,
+                "scoreboard_markdown": scoreboard_md.name,
+                "scoreboard_summary": scoreboard["summary"],
+                "results": results,
+            },
+            indent=2,
+            ensure_ascii=False,
+        )
+    )
 
 
 if __name__ == "__main__":

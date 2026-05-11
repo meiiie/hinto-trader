@@ -85,6 +85,8 @@ portfolio_backtest_*.csv
 backend/portfolio_backtest_*.csv
 backend/experiment_*.json
 backend/research_matrix_*.json
+backend/research_scoreboard_*.json
+backend/research_scoreboard_*.md
 backend/research_checkpoints/*.json
 run_bt.bat
 

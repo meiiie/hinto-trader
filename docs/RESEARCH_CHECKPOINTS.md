@@ -8,7 +8,19 @@ exact config hash, trade artifact, audit metrics, and decision.
 
 1. Run a backtest or research matrix.
 2. Confirm it produced `experiment_*.json` metadata.
-3. Create a checkpoint:
+3. Generate or review the research scoreboard.
+4. Create a checkpoint:
+
+```bash
+python backend/scripts/research_scoreboard.py backend/experiment_YYYYMMDD_HHMMSS_xxxxxx.json
+```
+
+`backend/scripts/run_research_matrix.py` creates
+`research_scoreboard_*.json` and `research_scoreboard_*.md` automatically for
+matrix runs. The scoreboard is not a second source of truth; it is a compact
+view over the same trade CSV, experiment metadata, and `research_audit` gates.
+Use it to compare return, profit factor, expectancy, drawdown, bootstrap
+confidence, weak symbols, and exit reasons before creating a checkpoint.
 
 ```bash
 python backend/scripts/checkpoint_research.py backend/experiment_YYYYMMDD_HHMMSS_xxxxxx.json
