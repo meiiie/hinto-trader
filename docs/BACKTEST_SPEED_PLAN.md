@@ -28,7 +28,9 @@ research checks until pre-screening and cache warmup improve.
    Use `--max-pos`, `--top`, `--balance`, `--risk`, and `--leverage` to match
    the intended paper profile instead of editing the script.
 3. Preload and validate cache coverage before a matrix starts so missing 1m
-   data fails early:
+   data fails early. The checker validates both absolute cache min/max and the
+   actual timestamps inside the requested window, so split caches such as a
+   `DOGEUSDT` 1m gap fail before the research result is trusted:
 
 ```bash
 python backend/scripts/check_backtest_coverage.py \

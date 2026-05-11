@@ -347,6 +347,63 @@ A local checkpoint was created for the `bounce_daily2` result with config hash
 `d1fd48e9bdc1`, but paper runtime was not changed. The longer covered-window
 checkpoint `81a0c75dbfbe` remains the active paper-observation checkpoint.
 
+## Walk-Forward And 10-Token Follow-Up
+
+The current paper universe was tested across four rolling-ish windows with
+`max-pos 3` and the same `$100` / `1%` risk profile:
+
+| Window | Baseline | Bounce daily2 | Trend runner |
+| --- | ---: | ---: | ---: |
+| `2026-01-24 -> 2026-02-24` | `-8.95%`, PF `0.74` | `+11.61%`, PF `1.92` | `+3.54%`, PF `1.37` |
+| `2026-02-24 -> 2026-03-24` | `-13.05%`, PF `0.68` | `-4.67%`, PF `0.72` | `+2.97%`, PF `1.33` |
+| `2026-03-24 -> 2026-04-24` | `+2.33%`, PF `1.07` | `+7.48%`, PF `1.46` | `-4.25%`, PF `0.00` |
+| `2026-04-11 -> 2026-05-11` | `+14.61%`, PF `1.57` | `+9.92%`, PF `1.87` | `+0.74%`, PF `1.40` |
+
+Interpretation: `bounce_daily2` is still the best paper-observation profile.
+It wins three of four windows versus baseline on drawdown/quality and is the
+least erratic of the three. The `2026-02-24 -> 2026-03-24` slice is the key
+warning: the strategy can still lose money even on the narrow paper universe,
+so it remains paper-only.
+
+The first 10-token candidate was:
+
+`BTCUSDT, ETHUSDT, BNBUSDT, SOLUSDT, XRPUSDT, DOGEUSDT, ADAUSDT, AVAXUSDT, LINKUSDT, LTCUSDT`
+
+`DOGEUSDT` was rejected by the live-like backtester because its 1m cache had a
+window coverage gap. The coverage checker now detects this case by verifying
+the actual timestamps inside the requested window, not only the absolute cache
+min/max.
+
+The 10-token no-DOGE universe was then tested:
+
+`BTCUSDT, ETHUSDT, BNBUSDT, SOLUSDT, XRPUSDT, ADAUSDT, AVAXUSDT, LINKUSDT, LTCUSDT, DOTUSDT`
+
+`bounce_daily2` results:
+
+| Window | Return | Trades | PF | Bootstrap positive expectancy |
+| --- | ---: | ---: | ---: | ---: |
+| `2026-01-24 -> 2026-02-24` | `+5.97%` | `41` | `1.24` | `75.8%` |
+| `2026-02-24 -> 2026-03-24` | `-22.29%` | `50` | `0.45` | `0.7%` |
+| `2026-03-24 -> 2026-04-24` | `+3.10%` | `50` | `1.10` | `62.4%` |
+| `2026-04-11 -> 2026-05-11` | `+2.29%` | `43` | `1.08` | `60.6%` |
+
+The 10-token universe is rejected for paper runtime. It adds more trades, but
+the extra symbols dilute the edge and introduce a severe `-22.29%` month.
+Worst contributors in the rejected month included `SOLUSDT`, `LINKUSDT`,
+`DOTUSDT`, `XRPUSDT`, and `BTCUSDT`. A rejected checkpoint was created for the
+bad 10-token run with config hash `fdfe04eee10c`; it produced no paper runtime
+suggestion.
+
+On the recent `2026-04-11 -> 2026-05-11` 10-token universe, extra strategy
+checks also failed:
+
+- baseline: about `-0.49%`, PF `0.99`, max drawdown `16.68%`, `REJECT`;
+- trend-runner: about `-5.45%`, PF `0.53`, bootstrap positive-expectancy
+  probability `15.2%`, `REJECT`.
+
+Current decision: keep paper runtime on `ETHUSDT, BNBUSDT, XRPUSDT` and do not
+expand to 10 symbols yet.
+
 ## Next Research Steps
 
 - collect at least 200 paper/backtest-comparable trades before promoting any

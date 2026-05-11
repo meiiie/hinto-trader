@@ -91,3 +91,8 @@ The 2026-05-11 dynamic top50 smoke test was also rejected: `50` requested
 symbols collapsed to `27` quality-filter-eligible symbols, returned about
 `-6.5%` over four days, and had only about `9%` bootstrap positive-expectancy
 probability. No paper runtime settings were changed from that checkpoint.
+
+The 2026-05-11 10-token no-DOGE follow-up was rejected as well. Its worst
+30-day window returned about `-22.3%`, PF `0.45`, and only about `0.7%`
+bootstrap positive-expectancy probability. Checkpoint `fdfe04eee10c` correctly
+produced no paper runtime suggestion.
