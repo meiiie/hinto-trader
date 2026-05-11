@@ -489,7 +489,7 @@ class PaperTradingService:
 
         position.status = 'CLOSED'
         position.close_time = datetime.now()
-        position.realized_pnl = pnl
+        position.realized_pnl = (position.realized_pnl or 0.0) + pnl
         position.exit_reason = reason
 
         # Update DB
@@ -611,6 +611,7 @@ class PaperTradingService:
                     parent_pos.entry_price = avg_entry
                     parent_pos.quantity = total_qty
                     parent_pos.margin = total_margin
+                    parent_pos.realized_pnl = (parent_pos.realized_pnl or 0.0) - entry_fee
 
                     # Recalculate Liquidation Price
                     if parent_pos.side == 'LONG':
@@ -635,6 +636,7 @@ class PaperTradingService:
                     order.open_time = datetime.now() # Update fill time
                     # Store initial quantity for partial TP
                     order.initial_quantity = order.quantity
+                    order.realized_pnl = (order.realized_pnl or 0.0) - entry_fee
                     self.repo.update_order(order)
                     self._mark_signal_executed(order.signal_id, order.id)
                     logger.info(f"✅ FILLED {order.side} {order.symbol} @ {order.entry_price} (fee: ${entry_fee:.4f})")
@@ -760,17 +762,27 @@ class PaperTradingService:
                     else:
                         partial_pnl = (pos.entry_price - pos.take_profit) * close_qty
 
+                    partial_notional = pos.take_profit * close_qty
+                    partial_exit_fee = partial_notional * self.TAKER_FEE_PCT
+                    partial_pnl -= partial_exit_fee
+
                     # Update wallet balance with partial profit
                     current_balance = self.repo.get_account_balance()
                     self.repo.update_account_balance(current_balance + partial_pnl)
 
                     # Update position: reduce quantity, mark TP1 hit, move SL to breakeven
+                    pos.margin *= (1 - PARTIAL_TP_PCT)
                     pos.quantity = remaining_qty
                     pos.tp_hit_count = 1
+                    pos.realized_pnl = (pos.realized_pnl or 0.0) + partial_pnl
                     pos.stop_loss = pos.entry_price + (pos.entry_price * 0.0005 if pos.side == 'LONG' else -pos.entry_price * 0.0005)  # Small buffer
 
                     # Log partial close
-                    logger.info(f"🎯 PARTIAL TP1 (60%): {pos.symbol} @ {pos.take_profit:.4f} | PnL: ${partial_pnl:.2f} | Remaining: {remaining_qty:.4f}")
+                    logger.info(
+                        f"🎯 PARTIAL TP1 (60%): {pos.symbol} @ {pos.take_profit:.4f} | "
+                        f"PnL: ${partial_pnl:.2f} | Fee: ${partial_exit_fee:.4f} | "
+                        f"Remaining: {remaining_qty:.4f}"
+                    )
 
                     # Update DB
                     self.repo.update_order(pos)

@@ -442,6 +442,14 @@ async def get_portfolio(
     # SOTA: Add pending signals to PAPER portfolio
     try:
         pending_signals = signal_service.get_pending_signals() if signal_service else []
+        active_signal_ids = {order.signal_id for order in pending_orders if order.signal_id}
+
+        if signal_service:
+            stale_signals = [s for s in pending_signals if s.id not in active_signal_ids]
+            for stale in stale_signals:
+                signal_service.mark_expired(stale.id)
+
+        pending_signals = [s for s in pending_signals if s.id in active_signal_ids]
         response['pending_signals'] = [
             {
                 'id': s.id,

@@ -166,7 +166,8 @@ def get_paper_trading_service() -> PaperTradingService:
         logger.info(f"📁 Creating PaperTradingService for {env}")
         _cached_instances[cache_key] = PaperTradingService(
             repository=repo,
-            market_data_repository=market_data_repo
+            market_data_repository=market_data_repo,
+            signal_lifecycle_service=get_signal_lifecycle_service()
         )
 
     return _cached_instances[cache_key]
