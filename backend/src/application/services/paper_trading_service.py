@@ -11,13 +11,20 @@ from src.domain.repositories.i_order_repository import IOrderRepository
 # SOTA FIX: Import Market Repository for Price Oracle
 from src.infrastructure.persistence.sqlite_market_data_repository import SQLiteMarketDataRepository
 from src.trading_contract import (
+    PRODUCTION_AUTO_CLOSE_INTERVAL,
+    PRODUCTION_BLOCKED_WINDOWS_STR,
+    PRODUCTION_CB_MAX_CONSECUTIVE_LOSSES,
+    PRODUCTION_CB_MAX_DAILY_DRAWDOWN_PCT,
     PRODUCTION_CLOSE_PROFITABLE_AUTO,
     PRODUCTION_LEVERAGE,
+    PRODUCTION_LIMIT_CHASE_TIMEOUT_SECONDS,
     PRODUCTION_MAX_POSITIONS,
+    PRODUCTION_ORDER_TYPE,
     PRODUCTION_ORDER_TTL_MINUTES,
     PRODUCTION_PORTFOLIO_TARGET_PCT,
     PRODUCTION_PROFITABLE_THRESHOLD_PCT,
     PRODUCTION_RISK_PER_TRADE,
+    parse_blocked_windows,
 )
 import logging
 
@@ -871,29 +878,52 @@ class PaperTradingService:
     def get_settings(self) -> dict:
         """Get all trading settings"""
         settings = self.repo.get_all_settings()
+        blocked_windows_raw = settings.get("blocked_windows", PRODUCTION_BLOCKED_WINDOWS_STR)
+        try:
+            blocked_windows = parse_blocked_windows(blocked_windows_raw) if blocked_windows_raw else []
+        except ValueError:
+            blocked_windows = []
+
+        def as_bool(key: str, default: bool) -> bool:
+            raw = settings.get(key, "true" if default else "false")
+            return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
         # Return defaults aligned with the documented production contract.
         return {
             'risk_percent': float(settings.get('risk_percent', str(PRODUCTION_RISK_PER_TRADE * 100))),
             'max_positions': int(settings.get('max_positions', str(PRODUCTION_MAX_POSITIONS))),
             'leverage': int(settings.get('leverage', str(PRODUCTION_LEVERAGE))),
-            'auto_execute': settings.get('auto_execute', 'false') == 'true',
+            'auto_execute': as_bool('auto_execute', False),
             'execution_ttl_minutes': int(
                 settings.get('execution_ttl_minutes', str(PRODUCTION_ORDER_TTL_MINUTES))
             ),
-            'smart_recycling': settings.get('smart_recycling', 'false') == 'true',      # Default False (TTL45 Standard)
+            'smart_recycling': as_bool('smart_recycling', False),      # Default False (TTL45 Standard)
             # SOTA (Jan 2026): Auto-Close Profitable Positions
-            'close_profitable_auto': settings.get(
-                'close_profitable_auto',
-                'true' if PRODUCTION_CLOSE_PROFITABLE_AUTO else 'false',
-            ) == 'true',
+            'close_profitable_auto': as_bool('close_profitable_auto', PRODUCTION_CLOSE_PROFITABLE_AUTO),
             'profitable_threshold_pct': float(
                 settings.get('profitable_threshold_pct', str(PRODUCTION_PROFITABLE_THRESHOLD_PCT))
             ),
+            'auto_close_interval': settings.get('auto_close_interval', PRODUCTION_AUTO_CLOSE_INTERVAL),
             # SOTA (Jan 2026): Portfolio Target
             'portfolio_target_pct': float(
                 settings.get('portfolio_target_pct', str(PRODUCTION_PORTFOLIO_TARGET_PCT))
-            )
+            ),
+            'max_consecutive_losses': int(
+                settings.get('max_consecutive_losses', str(PRODUCTION_CB_MAX_CONSECUTIVE_LOSSES))
+            ),
+            'cooldown_minutes': float(settings.get('cooldown_minutes', "0")),
+            'daily_symbol_loss_limit': int(settings.get('daily_symbol_loss_limit', "0")),
+            'blocked_windows': blocked_windows,
+            'blocked_windows_enabled': as_bool('blocked_windows_enabled', bool(blocked_windows)),
+            'blocked_windows_utc_offset': int(settings.get('blocked_windows_utc_offset', "7")),
+            'max_daily_drawdown_pct': float(
+                settings.get('max_daily_drawdown_pct', str(PRODUCTION_CB_MAX_DAILY_DRAWDOWN_PCT))
+            ),
+            'dz_force_close_enabled': as_bool('dz_force_close_enabled', False),
+            'order_type': settings.get('order_type', PRODUCTION_ORDER_TYPE),
+            'limit_chase_timeout_seconds': int(
+                settings.get('limit_chase_timeout_seconds', str(PRODUCTION_LIMIT_CHASE_TIMEOUT_SECONDS))
+            ),
             # NOTE: rr_ratio removed - backtest uses SL/TP from strategy signal
         }
 
@@ -911,7 +941,11 @@ class PaperTradingService:
         allowed_keys = [
             'risk_percent', 'max_positions', 'leverage', 'auto_execute',
             'execution_ttl_minutes', 'smart_recycling',
-            'close_profitable_auto', 'profitable_threshold_pct', 'portfolio_target_pct'
+            'close_profitable_auto', 'profitable_threshold_pct', 'auto_close_interval',
+            'portfolio_target_pct', 'max_consecutive_losses', 'cooldown_minutes',
+            'daily_symbol_loss_limit', 'blocked_windows', 'blocked_windows_enabled',
+            'blocked_windows_utc_offset', 'max_daily_drawdown_pct',
+            'dz_force_close_enabled', 'order_type', 'limit_chase_timeout_seconds'
         ]
 
         for key, value in settings.items():

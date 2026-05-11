@@ -48,6 +48,11 @@ def _paper_env_suggestion(metadata: dict, audit: dict) -> dict | None:
         "PAPER_START_BALANCE": "100",
         "PAPER_RISK_PERCENT": "0.01",
         "PAPER_MAX_POSITIONS": str(args.get("max_pos", 4)),
+        "PAPER_CLOSE_PROFITABLE_AUTO": "true" if args.get("close_profitable_auto") else "false",
+        "PAPER_DAILY_SYMBOL_LOSS_LIMIT": str(int(args.get("daily_symbol_loss_limit") or 0)),
+        "PAPER_BLOCKED_WINDOWS": str(args.get("blocked_windows") or ""),
+        "PAPER_BLOCKED_WINDOWS_ENABLED": "true" if args.get("blocked_windows") else "false",
+        "PAPER_MAX_DAILY_DRAWDOWN_PCT": str(args.get("drawdown", 0.15)),
         "PAPER_RESEARCH_CONFIG_HASH": metadata.get("config_hash"),
         "PAPER_RESEARCH_DECISION": decision,
     }

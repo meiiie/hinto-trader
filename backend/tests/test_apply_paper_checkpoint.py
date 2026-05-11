@@ -72,6 +72,11 @@ def test_apply_checkpoint_syncs_paper_db_settings(tmp_path):
                     "PAPER_RISK_PERCENT": "0.01",
                     "PAPER_MAX_POSITIONS": "3",
                     "PAPER_START_BALANCE": "100",
+                    "PAPER_CLOSE_PROFITABLE_AUTO": "false",
+                    "PAPER_DAILY_SYMBOL_LOSS_LIMIT": "2",
+                    "PAPER_BLOCKED_WINDOWS": "03:00-05:00,06:00-08:00",
+                    "PAPER_BLOCKED_WINDOWS_ENABLED": "true",
+                    "PAPER_MAX_DAILY_DRAWDOWN_PCT": "0.30",
                 },
             }
         ),
@@ -88,6 +93,11 @@ def test_apply_checkpoint_syncs_paper_db_settings(tmp_path):
     assert settings["enabled_tokens"] == "ETHUSDT,BNBUSDT,XRPUSDT"
     assert settings["risk_percent"] == "1.0"
     assert settings["max_positions"] == "3"
+    assert settings["close_profitable_auto"] == "false"
+    assert settings["daily_symbol_loss_limit"] == "2"
+    assert settings["blocked_windows"] == "03:00-05:00,06:00-08:00"
+    assert settings["blocked_windows_enabled"] == "true"
+    assert settings["max_daily_drawdown_pct"] == "0.3"
     assert balance == 100
     assert signal_count == 0
     assert result["paper_db"]["reset_paper_state"] is True

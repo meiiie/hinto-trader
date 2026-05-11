@@ -404,6 +404,74 @@ checks also failed:
 Current decision: keep paper runtime on `ETHUSDT, BNBUSDT, XRPUSDT` and do not
 expand to 10 symbols yet.
 
+## Guard-Variant Follow-Up
+
+The current paper universe was retested with additional guard variants across
+the same four walk-forward windows:
+
+- `bounce_symbol_side2`: adds symbol+side quarantine after repeated losses;
+- `bounce_direction2`: blocks repeated losing trade direction;
+- `bounce_time_shield`: blocks historically weak UTC+7 time windows;
+- `bounce_btc_impulse`: blocks entries during sharp BTC impulse context.
+
+Three of the four guard variants still failed because at least one window was
+negative and rejected. `bounce_time_shield` was the only variant with all four
+paper-universe windows positive:
+
+| Case | Positive windows | Avg return | Min return | Max DD | Trades | Decision |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `bounce_time_shield` | `4/4` | `+6.12%` | `+1.88%` | `3.53%` | `36` | `FRAGILE` |
+| `bounce_daily2` | `3/4` | `+6.08%` | `-4.67%` | `7.55%` | `97` | `REJECT` |
+| `bounce_symbol_side2` | `3/4` | `+5.33%` | `-3.07%` | `6.90%` | `92` | `REJECT` |
+| `bounce_btc_impulse` | `3/4` | `+5.07%` | `-5.64%` | `8.20%` | `83` | `REJECT` |
+
+This is useful evidence that time-of-day risk matters, but it is not a paper
+runtime upgrade. The time shield cut the sample to only `36` trades and is too
+close to a data-derived filter to trust without broader confirmation.
+
+The same `bounce_time_shield` check on the 10-token no-DOGE universe reduced
+damage but still failed:
+
+- positive windows: `3/4`
+- average return: `+4.28%`
+- worst window: `-3.30%`
+- max drawdown: `6.00%`
+- trades: `89`
+- decision: `REJECT`
+
+Interpretation: the filter is a promising research lead, not a validated edge.
+Do not apply it to paper runtime until it passes wider out-of-sample checks
+with enough trades and without a rejected window.
+
+## Paper Runtime Activation Follow-Up
+
+Paper runtime was rechecked after the guard-variant research. Two parity issues
+were fixed before continuing paper observation:
+
+- checkpoint application now syncs runtime controls beyond symbols/risk/slots:
+  `close_profitable_auto`, `daily_symbol_loss_limit`, blocked windows, and the
+  paper checkpoint hash;
+- SharkTank no longer discards a signal batch when the 15-minute cooldown is
+  short by a few seconds. It defers the batch and processes it when cooldown
+  expires, preventing paper mode from silently missing the next candle.
+
+The active paper runtime was then refreshed from checkpoint `81a0c75dbfbe`
+without resetting the paper wallet:
+
+- execution mode: `paper_real`
+- real exchange ordering: `false`
+- balance: `$100`
+- symbols: `BNBUSDT, ETHUSDT, XRPUSDT`
+- risk: `1%`
+- max positions: `3`
+- close-profitable auto: `false`
+- daily symbol loss limit: `2`
+- pending paper orders observed: `3`
+
+The pending orders are local simulated orders only. They use live Binance
+market data for price movement, but `/system/config.real_ordering_enabled`
+remains `false`.
+
 ## Next Research Steps
 
 - collect at least 200 paper/backtest-comparable trades before promoting any

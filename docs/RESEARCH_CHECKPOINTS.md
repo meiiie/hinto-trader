@@ -110,3 +110,19 @@ The 2026-05-11 10-token no-DOGE follow-up was rejected as well. Its worst
 30-day window returned about `-22.3%`, PF `0.45`, and only about `0.7%`
 bootstrap positive-expectancy probability. Checkpoint `fdfe04eee10c` correctly
 produced no paper runtime suggestion.
+
+The 2026-05-11 guard-variant follow-up found one promising but fragile lead:
+`bounce_time_shield` produced four positive windows on the current paper
+universe, with about `+6.1%` average return and `3.5%` max drawdown, but only
+`36` total trades. The same filter on the 10-token no-DOGE universe still had
+one rejected window. Treat it as a research candidate only; the active paper
+runtime remains `ETHUSDT, BNBUSDT, XRPUSDT` with `bounce_daily2` checkpoint
+`81a0c75dbfbe`.
+
+Checkpoint `81a0c75dbfbe` was regenerated with the expanded paper suggestion
+schema and applied locally for paper observation. The apply path now syncs
+`close_profitable_auto=false`, `daily_symbol_loss_limit=2`, blocked windows,
+symbols, risk, and max positions into the paper SQLite settings DB. SharkTank
+cooldown handling was also corrected so runtime defers near-cooldown batches
+instead of discarding them. Paper-real is active with local simulated orders
+only; real exchange ordering remains disabled.

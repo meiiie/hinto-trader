@@ -379,6 +379,36 @@ async def update_settings(
                         f"🎯 LiveTradingService portfolio_target_pct synced to: {update_dict['portfolio_target_pct']}%"
                     )
 
+        runtime_risk_keys = {
+            'max_consecutive_losses',
+            'cooldown_minutes',
+            'daily_symbol_loss_limit',
+            'blocked_windows',
+            'blocked_windows_enabled',
+            'max_daily_drawdown_pct',
+        }
+        if runtime_risk_keys.intersection(update_dict):
+            from ..dependencies import get_container
+
+            container = get_container()
+            cb = container.get_circuit_breaker()
+            cb.update_params(
+                **{
+                    key: update_dict[key]
+                    for key in runtime_risk_keys
+                    if key in update_dict
+                }
+            )
+
+        try:
+            from ..dependencies import get_container
+
+            container = get_container()
+            settings_provider = container.get_settings_provider()
+            settings_provider.invalidate_cache()
+        except Exception as exc:
+            logger.debug(f"SettingsProvider cache invalidation skipped: {exc}")
+
         return SettingsResponse(**updated)
 
 

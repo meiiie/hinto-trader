@@ -23,6 +23,11 @@ ALLOWED_KEYS = {
     "PAPER_START_BALANCE",
     "PAPER_RISK_PERCENT",
     "PAPER_MAX_POSITIONS",
+    "PAPER_CLOSE_PROFITABLE_AUTO",
+    "PAPER_DAILY_SYMBOL_LOSS_LIMIT",
+    "PAPER_BLOCKED_WINDOWS",
+    "PAPER_BLOCKED_WINDOWS_ENABLED",
+    "PAPER_MAX_DAILY_DRAWDOWN_PCT",
     "PAPER_RESEARCH_CONFIG_HASH",
     "PAPER_RESEARCH_DECISION",
 }
@@ -30,6 +35,11 @@ DB_SETTING_KEYS = {
     "enabled_tokens",
     "risk_percent",
     "max_positions",
+    "close_profitable_auto",
+    "daily_symbol_loss_limit",
+    "blocked_windows",
+    "blocked_windows_enabled",
+    "max_daily_drawdown_pct",
 }
 
 
@@ -56,6 +66,25 @@ def _setting_updates(suggestion: dict) -> dict:
     max_positions = suggestion.get("PAPER_MAX_POSITIONS")
     if max_positions is not None:
         updates["max_positions"] = str(int(max_positions))
+    close_profitable = suggestion.get("PAPER_CLOSE_PROFITABLE_AUTO")
+    if close_profitable is not None:
+        updates["close_profitable_auto"] = (
+            "true" if str(close_profitable).strip().lower() in {"1", "true", "yes", "on"} else "false"
+        )
+    daily_loss_limit = suggestion.get("PAPER_DAILY_SYMBOL_LOSS_LIMIT")
+    if daily_loss_limit is not None:
+        updates["daily_symbol_loss_limit"] = str(int(daily_loss_limit))
+    blocked_windows = suggestion.get("PAPER_BLOCKED_WINDOWS")
+    if blocked_windows is not None:
+        updates["blocked_windows"] = str(blocked_windows)
+    blocked_windows_enabled = suggestion.get("PAPER_BLOCKED_WINDOWS_ENABLED")
+    if blocked_windows_enabled is not None:
+        updates["blocked_windows_enabled"] = (
+            "true" if str(blocked_windows_enabled).strip().lower() in {"1", "true", "yes", "on"} else "false"
+        )
+    max_daily_drawdown = suggestion.get("PAPER_MAX_DAILY_DRAWDOWN_PCT")
+    if max_daily_drawdown is not None:
+        updates["max_daily_drawdown_pct"] = str(float(max_daily_drawdown))
     return updates
 
 

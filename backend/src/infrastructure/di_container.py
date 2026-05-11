@@ -66,6 +66,7 @@ from ..trading_contract import (
     PRODUCTION_USE_MAX_SL_VALIDATION,
     PRODUCTION_USE_MTF_TREND,
     get_production_blocked_windows,
+    parse_blocked_windows,
 )
 
 
@@ -1098,6 +1099,25 @@ class DIContainer:
         if 'circuit_breaker' not in self._instances:
             from ..application.risk_management.circuit_breaker import CircuitBreaker
 
+            settings = {}
+            try:
+                settings = self.get_order_repository().get_all_settings()
+            except Exception as exc:
+                self.logger.warning(f"Failed to load CircuitBreaker settings from DB: {exc}")
+
+            blocked_windows = get_production_blocked_windows()
+            if "blocked_windows" in settings:
+                raw_windows = str(settings.get("blocked_windows") or "")
+                try:
+                    blocked_windows = parse_blocked_windows(raw_windows) if raw_windows else []
+                except ValueError as exc:
+                    self.logger.warning(f"Invalid blocked_windows setting; using production defaults: {exc}")
+
+            def _as_bool(value, default: bool) -> bool:
+                if value is None:
+                    return default
+                return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
             # SOTA (Feb 9, 2026): Per-symbol CB + Trading Schedule ENABLED
             # LIVE data shows 50% WR (vs 78.5% backtest) due to revenge-trading on losing symbols.
             # Two new layers: (1) Per-symbol direction cooldown, (2) Dead zone time windows.
@@ -1109,8 +1129,8 @@ class DIContainer:
                 max_consecutive_losses=999,          # Effectively disabled (never triggers)
                 cooldown_hours=0.0,                  # No cooldown
                 max_daily_drawdown_pct=0.30,         # Global: halt at 30% DD — raised for $11 balance (25.9% MaxDD expected)
-                daily_symbol_loss_limit=0,           # DISABLED
-                blocked_windows=get_production_blocked_windows(),
+                daily_symbol_loss_limit=int(settings.get("daily_symbol_loss_limit", 0)),
+                blocked_windows=blocked_windows,
                 blocked_windows_utc_offset=7,       # UTC+7 (Vietnam timezone)
                 # F1: Escalating CB — DISABLED (blocks recovery trades)
                 use_escalating_cooldown=False,
@@ -1121,10 +1141,17 @@ class DIContainer:
                 direction_block_window_hours=2.0,
                 direction_block_cooldown_hours=4.0,
             )
+            self._instances['circuit_breaker'].max_daily_drawdown_pct = float(
+                settings.get("max_daily_drawdown_pct", 0.30)
+            )
+            self._instances['circuit_breaker'].blocked_windows_enabled = _as_bool(
+                settings.get("blocked_windows_enabled"),
+                len(blocked_windows) > 0,
+            )
             dz_str = ", ".join(f"{w['start']}-{w['end']}" for w in self._instances['circuit_breaker'].blocked_windows)
             self.logger.info(
-                f"Created CircuitBreaker: per-symbol=OFF, daily_limit=OFF, "
-                f"dead_zones=[{dz_str} UTC+7], global_dd=30%, "
+                f"Created CircuitBreaker: per-symbol=OFF, daily_limit={self._instances['circuit_breaker'].daily_symbol_loss_limit}, "
+                f"dead_zones=[{dz_str} UTC+7], global_dd={self._instances['circuit_breaker'].max_daily_drawdown_pct*100:.0f}%, "
                 f"escalating_cb=OFF, direction_block=OFF"
             )
 

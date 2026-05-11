@@ -104,6 +104,58 @@ def _cases(
             tuple([*base, "--bounce-confirm", "--daily-symbol-loss-limit", "2"]),
         ),
         ResearchCase(
+            "bounce_symbol_side2",
+            tuple(
+                [
+                    *base,
+                    "--bounce-confirm",
+                    "--daily-symbol-loss-limit",
+                    "2",
+                    "--symbol-side-loss-limit",
+                    "2",
+                    "--symbol-side-loss-window",
+                    "72",
+                    "--symbol-side-cooldown",
+                    "72",
+                ]
+            ),
+        ),
+        ResearchCase(
+            "bounce_direction2",
+            tuple(
+                [
+                    *base,
+                    "--bounce-confirm",
+                    "--daily-symbol-loss-limit",
+                    "2",
+                    "--direction-block",
+                    "--direction-block-threshold",
+                    "2",
+                    "--direction-block-window",
+                    "2",
+                    "--direction-block-cooldown",
+                    "4",
+                ]
+            ),
+        ),
+        ResearchCase(
+            "bounce_time_shield",
+            tuple(
+                [
+                    *base,
+                    "--bounce-confirm",
+                    "--daily-symbol-loss-limit",
+                    "2",
+                    "--blocked-windows",
+                    "03:00-05:00,06:00-08:00,09:00-11:00,14:00-18:00,18:00-21:00,21:00-23:00,23:00-00:00",
+                ]
+            ),
+        ),
+        ResearchCase(
+            "bounce_btc_impulse",
+            tuple([*base, "--bounce-confirm", "--daily-symbol-loss-limit", "2", "--btc-impulse-filter"]),
+        ),
+        ResearchCase(
             "trend_runner",
             tuple([*base, "--strategy-id", "liquidity_reclaim_trend_runner"]),
         ),
@@ -160,7 +212,7 @@ def _newest_metadata(before: set[Path]) -> Path:
     return created[0]
 
 
-def _run_case(case: ResearchCase, audit_runs: int) -> dict:
+def _run_case(case: ResearchCase, audit_runs: int, *, initial_balance: float, risk_percent: float) -> dict:
     before = set(ROOT.glob("experiment_*.json"))
     cmd = [sys.executable, "run_backtest.py", *case.args]
     started = time.perf_counter()
@@ -197,8 +249,8 @@ def _run_case(case: ResearchCase, audit_runs: int) -> dict:
     trade_path = ROOT / metadata["artifacts"]["trades_csv"]
     audit = audit_trades(
         load_trades(trade_path),
-        initial_balance=100.0,
-        risk_percent=0.01,
+        initial_balance=initial_balance,
+        risk_percent=risk_percent,
         monte_carlo_runs=audit_runs,
     )
     return {
@@ -245,7 +297,10 @@ def run_matrix(
         if missing:
             raise ValueError(f"Unknown case(s): {', '.join(sorted(missing))}")
 
-    results = [_run_case(case, audit_runs) for case in cases]
+    results = [
+        _run_case(case, audit_runs, initial_balance=balance, risk_percent=risk)
+        for case in cases
+    ]
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     output = ROOT / f"research_matrix_{stamp}.json"
     scoreboard = build_scoreboard(results)

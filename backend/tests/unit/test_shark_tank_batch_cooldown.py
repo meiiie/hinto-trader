@@ -76,8 +76,8 @@ class TestBatchCooldown:
         assert coordinator.metrics['batches_rejected_cooldown'] == 0
         assert coordinator._execute_callback.call_count == 1
 
-    def test_second_batch_within_cooldown_rejected(self, coordinator, sample_signal):
-        """Second batch within cooldown should be rejected."""
+    def test_second_batch_within_cooldown_deferred(self, coordinator, sample_signal):
+        """Second batch within cooldown should be retained for the next allowed batch."""
         # Arrange
         signal1 = sample_signal("BTCUSDT", 0.9)
         signal2 = sample_signal("ETHUSDT", 0.85)
@@ -95,7 +95,9 @@ class TestBatchCooldown:
         # Assert
         assert coordinator.metrics['batches_processed'] == 1
         assert coordinator.metrics['batches_rejected_cooldown'] == 1
-        assert coordinator.metrics['total_signals_rejected'] == 1
+        assert coordinator.metrics['batches_deferred_cooldown'] == 1
+        assert coordinator.metrics['total_signals_rejected'] == 0
+        assert coordinator.get_pending_count() == 1
         assert coordinator._execute_callback.call_count == 1  # Only first batch
 
     def test_third_batch_after_cooldown_executes(self, coordinator, sample_signal):
@@ -125,10 +127,10 @@ class TestBatchCooldown:
         # Assert
         assert coordinator.metrics['batches_processed'] == 2
         assert coordinator.metrics['batches_rejected_cooldown'] == 1
-        assert coordinator._execute_callback.call_count == 2  # Batch 1 and 3
+        assert coordinator._execute_callback.call_count == 3  # Batch 1, then deferred + new
 
-    def test_multiple_signals_in_rejected_batch(self, coordinator, sample_signal):
-        """All signals in rejected batch should be counted."""
+    def test_multiple_signals_in_deferred_batch(self, coordinator, sample_signal):
+        """All signals in a cooldown batch should be retained."""
         # Arrange
         signal1 = sample_signal("BTCUSDT", 0.9)
         signal2 = sample_signal("ETHUSDT", 0.85)
@@ -149,7 +151,9 @@ class TestBatchCooldown:
 
         # Assert
         assert coordinator.metrics['batches_rejected_cooldown'] == 1
-        assert coordinator.metrics['total_signals_rejected'] == 3  # All 3 signals rejected
+        assert coordinator.metrics['batches_deferred_cooldown'] == 1
+        assert coordinator.metrics['total_signals_rejected'] == 0
+        assert coordinator.get_pending_count() == 3
 
     def test_cooldown_timing_precision(self, coordinator, sample_signal):
         """Test cooldown timing is precise."""
@@ -170,8 +174,9 @@ class TestBatchCooldown:
             coordinator.collect_signal(signal2, "ETHUSDT")
             coordinator.force_process()
 
-        # Assert - Should be rejected
+        # Assert - Should be deferred, not discarded
         assert coordinator.metrics['batches_rejected_cooldown'] == 1
+        assert coordinator.get_pending_count() == 1
 
         # Act - Batch 3 (wait remaining time + buffer)
         time.sleep(0.2)  # Total 2.1 seconds > 2 second cooldown
@@ -197,6 +202,7 @@ class TestBatchCooldown:
         # Assert
         assert 'batches_processed' in metrics
         assert 'batches_rejected_cooldown' in metrics
+        assert 'batches_deferred_cooldown' in metrics
         assert 'total_signals_processed' in metrics
         assert 'total_signals_rejected' in metrics
         assert 'last_batch_time' in metrics
@@ -242,25 +248,26 @@ class TestBatchCooldownIntegration:
             coordinator.collect_signal(sample_signal("BTCUSDT", 0.9), "BTCUSDT")
             coordinator.force_process()
 
-            # Event 2: 00:05 (2s later) - Should reject
+            # Event 2: 00:05 (2s later) - Should defer
             time.sleep(2)
             coordinator.collect_signal(sample_signal("ETHUSDT", 0.85), "ETHUSDT")
             coordinator.force_process()
 
-            # Event 3: 00:10 (4s later) - Should reject
+            # Event 3: 00:10 (4s later) - Should still defer
             time.sleep(2)
             coordinator.collect_signal(sample_signal("BNBUSDT", 0.88), "BNBUSDT")
             coordinator.force_process()
 
-            # Event 4: 00:15 (6s later) - Should execute
+            # Event 4: 00:15 (6s later) - Should execute deferred + new
             time.sleep(2)
             coordinator.collect_signal(sample_signal("ADAUSDT", 0.82), "ADAUSDT")
             coordinator.force_process()
 
         # Assert
         assert coordinator.metrics['batches_processed'] == 2  # Event 1 and 4
-        assert coordinator.metrics['batches_rejected_cooldown'] == 2  # Event 2 and 3
-        assert coordinator._execute_callback.call_count == 2
+        assert coordinator.metrics['batches_rejected_cooldown'] == 1  # Same cooldown window
+        assert coordinator.metrics['batches_deferred_cooldown'] == 1
+        assert coordinator._execute_callback.call_count == 4
 
     def test_realistic_live_scenario(self, coordinator, sample_signal):
         """Test realistic live scenario with async events."""
@@ -286,9 +293,11 @@ class TestBatchCooldownIntegration:
                 coordinator.collect_signal(sample_signal(symbol, confidence), symbol)
                 coordinator.force_process()
 
-        # Assert - Only first and last should execute
+        # Assert - First executes, middle signals are retained, final flush executes all retained.
         assert coordinator.metrics['batches_processed'] == 2
-        assert coordinator.metrics['batches_rejected_cooldown'] == 3
+        assert coordinator.metrics['batches_rejected_cooldown'] == 1
+        assert coordinator.metrics['batches_deferred_cooldown'] == 1
+        assert coordinator._execute_callback.call_count == 5
 
 
 if __name__ == "__main__":
