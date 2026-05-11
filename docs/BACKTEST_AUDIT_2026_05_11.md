@@ -314,6 +314,39 @@ on the caller's current working directory. The volume ranking cache is now
 anchored under `backend/data/cache/volume_rankings`, matching the rest of the
 historical data cache.
 
+## Paper Universe Matrix Follow-Up
+
+After adding research scoreboards, a 30-day matrix was run on the current paper
+universe with paper-like sizing:
+
+```bash
+python backend/scripts/run_research_matrix.py \
+  --start 2026-04-11 --end 2026-05-11 \
+  --symbols ETHUSDT,BNBUSDT,XRPUSDT --max-pos 3 \
+  --case baseline_contract --case bounce_daily2 --case trend_runner \
+  --audit-runs 1000
+```
+
+Results:
+
+- `baseline_contract`: `+14.61%`, `42` trades, PF `1.57`, max drawdown
+  `7.88%`, bootstrap positive-expectancy probability `92.0%`;
+- `bounce_daily2`: `+9.92%`, `22` trades, PF `1.87`, max drawdown `4.50%`,
+  bootstrap positive-expectancy probability `91.7%`;
+- `trend_runner`: `+0.74%`, `2` trades, PF `1.40`, max drawdown `1.81%`,
+  bootstrap positive-expectancy probability `75.5%`.
+
+All three cases remain `PAPER_ONLY_SMALL_SAMPLE` and fail the scoreboard sample
+gate. The current bounce/daily-loss profile is still the cleaner paper
+observation profile because it lowers drawdown and improves PF, even though the
+looser baseline produced more return in this 30-day slice. The trend-runner
+track did not produce enough trades on this narrow universe; it needs a
+separate universe/regime study before it can replace the current paper track.
+
+A local checkpoint was created for the `bounce_daily2` result with config hash
+`d1fd48e9bdc1`, but paper runtime was not changed. The longer covered-window
+checkpoint `81a0c75dbfbe` remains the active paper-observation checkpoint.
+
 ## Next Research Steps
 
 - collect at least 200 paper/backtest-comparable trades before promoting any

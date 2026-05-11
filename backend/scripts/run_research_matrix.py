@@ -36,16 +36,27 @@ class ResearchCase:
     args: tuple[str, ...]
 
 
-def _base_args(days: int | None, start: str | None, end: str | None, symbols: str | None) -> list[str]:
+def _base_args(
+    days: int | None,
+    start: str | None,
+    end: str | None,
+    symbols: str | None,
+    *,
+    top: int,
+    balance: float,
+    risk: float,
+    leverage: float,
+    max_pos: int,
+) -> list[str]:
     args = [
         "--balance",
-        "100",
+        str(balance),
         "--risk",
-        "0.01",
+        str(risk),
         "--leverage",
-        "20",
+        str(leverage),
         "--max-pos",
-        "4",
+        str(max_pos),
         "--no-compound",
         "--full-tp",
         "--maker-orders",
@@ -59,12 +70,33 @@ def _base_args(days: int | None, start: str | None, end: str | None, symbols: st
     if symbols:
         args = ["--symbols", symbols, *args]
     else:
-        args = ["--top", "30", *args]
+        args = ["--top", str(top), *args]
     return args
 
 
-def _cases(days: int | None, start: str | None, end: str | None, symbols: str | None) -> list[ResearchCase]:
-    base = _base_args(days, start, end, symbols)
+def _cases(
+    days: int | None,
+    start: str | None,
+    end: str | None,
+    symbols: str | None,
+    *,
+    top: int,
+    balance: float,
+    risk: float,
+    leverage: float,
+    max_pos: int,
+) -> list[ResearchCase]:
+    base = _base_args(
+        days,
+        start,
+        end,
+        symbols,
+        top=top,
+        balance=balance,
+        risk=risk,
+        leverage=leverage,
+        max_pos=max_pos,
+    )
     return [
         ResearchCase("baseline_contract", tuple(base)),
         ResearchCase(
@@ -186,12 +218,27 @@ def main() -> None:
     parser.add_argument("--days", type=int, default=30)
     parser.add_argument("--start", help="Start date YYYY-MM-DD. Must be paired with --end.")
     parser.add_argument("--end", help="End date YYYY-MM-DD. Must be paired with --start.")
-    parser.add_argument("--symbols", help="Comma-separated symbol universe. Defaults to --top 30 / fixed env universe.")
+    parser.add_argument("--symbols", help="Comma-separated symbol universe. Defaults to a dynamic top-N universe.")
+    parser.add_argument("--top", type=int, default=30, help="Dynamic top-N universe when --symbols is not provided.")
+    parser.add_argument("--balance", type=float, default=100.0)
+    parser.add_argument("--risk", type=float, default=0.01)
+    parser.add_argument("--leverage", type=float, default=20.0)
+    parser.add_argument("--max-pos", type=int, default=4)
     parser.add_argument("--audit-runs", type=int, default=1000)
     parser.add_argument("--case", action="append", help="Only run named case. Repeatable.")
     args = parser.parse_args()
 
-    cases = _cases(args.days, args.start, args.end, args.symbols)
+    cases = _cases(
+        args.days,
+        args.start,
+        args.end,
+        args.symbols,
+        top=args.top,
+        balance=args.balance,
+        risk=args.risk,
+        leverage=args.leverage,
+        max_pos=args.max_pos,
+    )
     if args.case:
         wanted = set(args.case)
         cases = [case for case in cases if case.name in wanted]

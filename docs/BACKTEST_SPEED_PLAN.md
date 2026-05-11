@@ -25,6 +25,8 @@ research checks until pre-screening and cache warmup improve.
 2. Use `scripts/run_research_matrix.py` to standardize experiment execution and
    prevent ad hoc result picking. Matrix runs now emit `research_scoreboard_*`
    JSON/Markdown summaries so weak cases are rejected by gates, not by memory.
+   Use `--max-pos`, `--top`, `--balance`, `--risk`, and `--leverage` to match
+   the intended paper profile instead of editing the script.
 3. Preload and validate cache coverage before a matrix starts so missing 1m
    data fails early:
 
