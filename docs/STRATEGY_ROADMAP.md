@@ -42,9 +42,10 @@ Paper-default adjustments after the audit:
 - add `03:00-05:00 UTC+7` to blocked windows;
 - enable the ADX max filter at `40` for the mean-reversion runtime path.
 
-After disabling auto-close and blocking `03:00-05:00`, the same core set
-improved to `-3.65%` over the four-day window, with max drawdown down to
-`9.04%`. This is better risk containment, not proof of edge.
+After disabling auto-close, blocking `03:00-05:00`, and enabling the ADX max
+filter, the same core set improved to roughly `-5.4%` over the four-day window,
+with max drawdown down to about `9%`. This is better risk containment, not
+proof of edge.
 
 ## Research Tracks
 

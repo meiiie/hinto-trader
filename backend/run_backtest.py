@@ -77,6 +77,25 @@ from src.application.signals.strategy_ids import DEFAULT_STRATEGY_ID, SUPPORTED_
 from src.application.analysis.trend_filter import TrendFilter
 from src.infrastructure.data.historical_data_loader import HistoricalDataLoader
 from src.config.market_mode import MarketMode, get_market_config
+from src.trading_contract import (
+    PRODUCTION_AC_THRESHOLD_EXIT,
+    PRODUCTION_ADX_MAX_THRESHOLD,
+    PRODUCTION_BLOCKED_WINDOWS_STR,
+    PRODUCTION_CLOSE_PROFITABLE_AUTO,
+    PRODUCTION_HARD_CAP_PCT,
+    PRODUCTION_MAX_SL_PCT,
+    PRODUCTION_ORDER_TTL_MINUTES,
+    PRODUCTION_PORTFOLIO_TARGET_PCT,
+    PRODUCTION_PROFITABLE_THRESHOLD_PCT,
+    PRODUCTION_SL_ON_CANDLE_CLOSE,
+    PRODUCTION_SNIPER_LOOKBACK,
+    PRODUCTION_SNIPER_PROXIMITY,
+    PRODUCTION_USE_1M_MONITORING,
+    PRODUCTION_USE_ADX_MAX_FILTER,
+    PRODUCTION_USE_DELTA_DIVERGENCE,
+    PRODUCTION_USE_MAX_SL_VALIDATION,
+    PRODUCTION_USE_MTF_TREND,
+)
 
 # Setup logging
 logging.basicConfig(
@@ -504,8 +523,8 @@ async def main():
     parser.add_argument("--no-cb", action="store_true", help="Disable Circuit Breaker. Shorthand for not using --cb")
     parser.add_argument("--zombie-killer", action="store_true",
                        help="[OPTIONAL] Replace pending orders with new signals. Default: OFF (TTL45 preferred)")
-    parser.add_argument("--ttl", type=int, default=45,
-                       help="Order TTL in minutes. 0=GTC. Default: 45")
+    parser.add_argument("--ttl", type=int, default=PRODUCTION_ORDER_TTL_MINUTES,
+                       help=f"Order TTL in minutes. 0=GTC. Default: {PRODUCTION_ORDER_TTL_MINUTES}")
     parser.add_argument("--time-filter", action="store_true",
                        help="[LEGACY] Binary time filter. Blocks 4 Death Hours (VN: 00, 05, 11, 22)")
     parser.add_argument("--tiered-time", action="store_true",
@@ -514,8 +533,8 @@ async def main():
                        help="[SOTA] Block Tier 4 (05-13h) but use 100%%%% size for all other hours")
     parser.add_argument("--live-dz", action="store_true",
                        help="[LIVE PARITY] Exact LIVE dead zones: 05-06, 09-14, 19-21:30, 22-23:30 UTC+7")
-    parser.add_argument("--blocked-windows", type=str, default=None,
-                       help="Custom blocked windows (UTC+7). Format: '22:00-23:00,00:00-01:00'")
+    parser.add_argument("--blocked-windows", type=str, default=PRODUCTION_BLOCKED_WINDOWS_STR,
+                       help=f"Custom blocked windows (UTC+7). Default: '{PRODUCTION_BLOCKED_WINDOWS_STR}'")
     parser.add_argument("--full-tp", action="store_true",
                        help="[OPTIONAL] Close 100%%%% position at TP1 (instead of default 60%%%%)")
     parser.add_argument("--block-short-early", action="store_true",
@@ -530,8 +549,8 @@ async def main():
                        help="[EXPERIMENTAL] Enable fixed $3 profit exit strategy (backtest only). Default: OFF")
     parser.add_argument("--portfolio-target", type=float, default=0.0,
                        help="[INSTITUTIONAL] Portfolio profit target in USD. Exit all positions when total PnL >= target. 0=disabled. Example: 7.0")
-    parser.add_argument("--portfolio-target-pct", type=float, default=0.0,
-                       help="[INSTITUTIONAL] Portfolio profit target as %% of capital. 0=disabled. Example: 3.68 for 3.68%%")
+    parser.add_argument("--portfolio-target-pct", type=float, default=PRODUCTION_PORTFOLIO_TARGET_PCT,
+                       help=f"[INSTITUTIONAL] Portfolio profit target as %% of capital. Default: {PRODUCTION_PORTFOLIO_TARGET_PCT}")
     parser.add_argument("--signal-reversal-exit", action="store_true",
                        help="[INSTITUTIONAL] Exit positions on high-confidence opposite signals. Default: OFF")
     parser.add_argument("--reversal-confidence", type=float, default=0.90,
@@ -544,16 +563,18 @@ async def main():
                        help="[TUNING] Custom breakeven trigger in R-multiple. Example: 0.8 for 0.8R. Default: 1.5 (or 0.8 if --use-optimized-exits)")
     parser.add_argument("--trailing-atr", type=float, default=None,
                        help="[TUNING] Custom trailing stop in ATR multiple. Example: 2.5 for ATR*2.5. Default: 4.0 (or 2.5 if --use-optimized-exits)")
-    parser.add_argument("--close-profitable-auto", action="store_true",
-                       help="[EXPERIMENTAL] Auto-close positions when ROE > threshold. Default: OFF")
-    parser.add_argument("--profitable-threshold-pct", type=float, default=5.0,
-                       help="[EXPERIMENTAL] ROE threshold for auto-close (%%). Default: 5.0")
+    parser.add_argument("--close-profitable-auto", action=argparse.BooleanOptionalAction,
+                       default=PRODUCTION_CLOSE_PROFITABLE_AUTO,
+                       help=f"[EXPERIMENTAL] Auto-close positions when ROE > threshold. Default: {PRODUCTION_CLOSE_PROFITABLE_AUTO}")
+    parser.add_argument("--profitable-threshold-pct", type=float, default=PRODUCTION_PROFITABLE_THRESHOLD_PCT,
+                       help=f"[EXPERIMENTAL] ROE threshold for auto-close (%%). Default: {PRODUCTION_PROFITABLE_THRESHOLD_PCT}")
     parser.add_argument("--profitable-check-interval", type=int, default=1,
                        help="[EXPERIMENTAL] Check auto-close every N candles. Default: 1 (every candle)")
-    parser.add_argument("--max-sl-validation", action="store_true",
-                       help="[RISK] Enable MAX SL validation - reject signals with SL > max-sl-pct. Default: OFF")
-    parser.add_argument("--max-sl-pct", type=float, default=None,
-                       help="[RISK] Custom MAX SL percentage. Example: 1.5 for 1.5%%. If not set, uses 10%%/leverage. Default: None")
+    parser.add_argument("--max-sl-validation", action=argparse.BooleanOptionalAction,
+                       default=PRODUCTION_USE_MAX_SL_VALIDATION,
+                       help=f"[RISK] Enable MAX SL validation - reject signals with SL > max-sl-pct. Default: {PRODUCTION_USE_MAX_SL_VALIDATION}")
+    parser.add_argument("--max-sl-pct", type=float, default=PRODUCTION_MAX_SL_PCT,
+                       help=f"[RISK] Custom MAX SL percentage. Example: 1.5 for 1.5%%. Default: {PRODUCTION_MAX_SL_PCT}")
     parser.add_argument("--profit-lock", action="store_true",
                        help="[SOTA] Enable Profit Lock - when ROE >= threshold, move SL up to lock profit. Default: OFF")
     parser.add_argument("--profit-lock-threshold", type=float, default=5.0,
@@ -581,10 +602,11 @@ async def main():
                        help="[INSTITUTIONAL] Volatility-adjusted position sizing. ATR-scaled. Default: OFF")
     parser.add_argument("--dynamic-tp", action="store_true",
                        help="[INSTITUTIONAL] ATR-scaled dynamic TP/SL/AUTO_CLOSE. Default: OFF")
-    parser.add_argument("--sl-on-close-only", action="store_true",
-                       help="[v6.0.0] Only check SL on candle CLOSE (matches LIVE candle-close mode). Default: OFF")
-    parser.add_argument("--hard-cap-pct", type=float, default=2.0,
-                       help="[v6.2.0] Hard cap loss %% (tick-level). 0=disabled. Default: 2.0")
+    parser.add_argument("--sl-on-close-only", action=argparse.BooleanOptionalAction,
+                       default=PRODUCTION_SL_ON_CANDLE_CLOSE,
+                       help=f"[v6.0.0] Only check SL on candle CLOSE (matches LIVE candle-close mode). Default: {PRODUCTION_SL_ON_CANDLE_CLOSE}")
+    parser.add_argument("--hard-cap-pct", type=float, default=PRODUCTION_HARD_CAP_PCT,
+                       help=f"[v6.2.0] Hard cap loss %% (tick-level). 0=disabled. Default: {PRODUCTION_HARD_CAP_PCT}")
     # EXPERIMENTAL (Feb 2026): R:R Improvement & Risk Management
     parser.add_argument("--partial-close-ac", action="store_true",
                        help="[EXPERIMENTAL] Partial close 50%% at AC threshold, trail remaining 50%%. Default: OFF")
@@ -599,26 +621,27 @@ async def main():
     parser.add_argument("--htf-filter", action="store_true",
                        help="[EXPERIMENTAL] Block counter-trend signals (LONG vs BEARISH 4H, SHORT vs BULLISH 4H). Default: OFF")
     # Mean-reversion indicator filters (Feb 2026)
-    parser.add_argument("--adx-max-filter", action="store_true",
-                       help="[FILTER] Block when ADX > threshold (too trendy for mean-reversion). Default: OFF")
-    parser.add_argument("--adx-max-threshold", type=float, default=40.0,
-                       help="[FILTER] ADX max threshold. Default: 40.0")
+    parser.add_argument("--adx-max-filter", action=argparse.BooleanOptionalAction,
+                       default=PRODUCTION_USE_ADX_MAX_FILTER,
+                       help=f"[FILTER] Block when ADX > threshold (too trendy for mean-reversion). Default: {PRODUCTION_USE_ADX_MAX_FILTER}")
+    parser.add_argument("--adx-max-threshold", type=float, default=PRODUCTION_ADX_MAX_THRESHOLD,
+                       help=f"[FILTER] ADX max threshold. Default: {PRODUCTION_ADX_MAX_THRESHOLD}")
     parser.add_argument("--bb-filter", action="store_true",
                        help="[FILTER] Bollinger Bands: BUY near lower band, SELL near upper band. Default: OFF")
     parser.add_argument("--stochrsi-filter", action="store_true",
                        help="[FILTER] StochRSI: BUY when oversold (<30), SELL when overbought (>70). Default: OFF")
     # Entry parameter tuning
-    parser.add_argument("--sniper-lookback", type=int, default=20,
-                       help="[ENTRY] Swing point lookback period (candles). Default: 20")
-    parser.add_argument("--sniper-proximity", type=float, default=1.5,
-                       help="[ENTRY] Proximity threshold %% to swing point. Default: 1.5")
+    parser.add_argument("--sniper-lookback", type=int, default=PRODUCTION_SNIPER_LOOKBACK,
+                       help=f"[ENTRY] Swing point lookback period (candles). Default: {PRODUCTION_SNIPER_LOOKBACK}")
+    parser.add_argument("--sniper-proximity", type=float, default=PRODUCTION_SNIPER_PROXIMITY * 100.0,
+                       help=f"[ENTRY] Proximity threshold %% to swing point. Default: {PRODUCTION_SNIPER_PROXIMITY * 100.0}")
     parser.add_argument("--strategy-id", type=str, choices=SUPPORTED_STRATEGY_IDS,
                        default=os.getenv("HINTO_STRATEGY_ID", DEFAULT_STRATEGY_ID),
                        help="[RESEARCH] Signal strategy: default mean-reversion sniper or positive-skew reclaim runner.")
     parser.add_argument("--volume-slippage", action="store_true",
                        help="[SOTA] Volume-adjusted slippage (Almgren-Chriss sqrt-vol model). Default: OFF")
-    parser.add_argument("--1m-monitoring", action="store_true", dest="m1_monitoring",
-                       help="[SOTA] Monitor positions using 1m candles (matches LIVE SL on 1m close). Default: OFF")
+    parser.add_argument("--1m-monitoring", action=argparse.BooleanOptionalAction, default=PRODUCTION_USE_1M_MONITORING, dest="m1_monitoring",
+                       help=f"[SOTA] Monitor positions using 1m candles (matches LIVE SL on 1m close). Default: {PRODUCTION_USE_1M_MONITORING}")
     parser.add_argument("--adversarial-path", action="store_true",
                        help="[SOTA] Adversarial intra-bar path: always check SL direction first (De Prado). Default: OFF")
     parser.add_argument("--ac-tick-level", action="store_true",
@@ -637,12 +660,12 @@ async def main():
     parser.add_argument("--funding-filter", action="store_true",
                        help="[SOTA] Funding rate filter — block overcrowded directions (>0.05%%). Default: OFF")
     # Phase 1 Strategy Filters (Feb 2026): Volume Delta + MTF Trend
-    parser.add_argument("--delta-divergence", action="store_true",
-                       help="[STRATEGY] Volume Delta Divergence filter — block signals contradicted by volume delta. Default: OFF")
-    parser.add_argument("--mtf-trend", action="store_true",
-                       help="[STRATEGY] MTF Trend filter — block counter-trend using faster EMA on 4H. Default: OFF")
-    parser.add_argument("--mtf-ema", type=int, default=50,
-                       help="[STRATEGY] MTF trend EMA period on 4H candles (50=~8 days). Default: 50")
+    parser.add_argument("--delta-divergence", action=argparse.BooleanOptionalAction, default=PRODUCTION_USE_DELTA_DIVERGENCE,
+                       help=f"[STRATEGY] Volume Delta Divergence filter — block signals contradicted by volume delta. Default: {PRODUCTION_USE_DELTA_DIVERGENCE}")
+    parser.add_argument("--mtf-trend", action=argparse.BooleanOptionalAction, default=PRODUCTION_USE_MTF_TREND,
+                       help=f"[STRATEGY] MTF Trend filter — block counter-trend using faster EMA on 4H. Default: {PRODUCTION_USE_MTF_TREND}")
+    parser.add_argument("--mtf-ema", type=int, default=20,
+                       help="[STRATEGY] MTF trend EMA period on 4H candles (50=~8 days, 20=~3.3 days). Default: 20")
     # BTC Regime Filter (Feb 2026): Block counter-trend based on BTC 4H trend
     parser.add_argument("--btc-regime-filter", action="store_true",
                        help="[REGIME] Block counter-trend signals based on BTC 4H EMA cross + momentum. Default: OFF")
@@ -675,8 +698,9 @@ async def main():
     # LIKE-LIVE (Feb 2026): Fix all BT biases to match LIVE behavior
     parser.add_argument("--like-live", action="store_true",
                        help="[LIKE-LIVE] Enable all BT bias fixes: AC threshold exit + N+1 fill + 1m monitoring + SL on close + hard cap 2%%. Default: OFF")
-    parser.add_argument("--ac-threshold-exit", action="store_true",
-                       help="[LIKE-LIVE] AC exits at threshold price (not candle close). Fixes +8-12pp WR inflation. Default: OFF")
+    parser.add_argument("--ac-threshold-exit", action=argparse.BooleanOptionalAction,
+                       default=PRODUCTION_AC_THRESHOLD_EXIT,
+                       help=f"[LIKE-LIVE] AC exits at threshold price (not candle close). Fixes +8-12pp WR inflation. Default: {PRODUCTION_AC_THRESHOLD_EXIT}")
     parser.add_argument("--n1-fill", action="store_true",
                        help="[LIKE-LIVE] N+1 fill rule: signals from candle N fill on N+1. Fixes +5-8pp WR inflation. Default: OFF")
     # REALISTIC FILLS (Feb 2026): Fill at target price, not candle extreme
@@ -685,8 +709,8 @@ async def main():
                        help="[v6.5.12] Force-close ALL positions when dead zone starts (matches LIVE). Default: OFF")
     parser.add_argument("--no-realistic-fills", action="store_true",
                        help="[FILL] Disable realistic fills (revert to legacy: fill at candle LOW/HIGH). Default: realistic fills ON")
-    parser.add_argument("--fill-buffer", type=float, default=0.1,
-                       help="[FILL] Pessimistic fill buffer %%: price must overshoot target by this %% for fill. 0=no buffer (LIVE-like). Default: 0.1")
+    parser.add_argument("--fill-buffer", type=float, default=0.0,
+                       help="[FILL] Pessimistic fill buffer %%: price must overshoot target by this %% for fill. 0=no buffer (LIVE-like). Default: 0.0")
     # F3: Gradual Position Sizing (Balance Ramp)
     parser.add_argument("--balance-ramp", action="store_true",
                        help="[RISK] Gradual position sizing after large balance changes. Only with compounding (no --no-compound). Default: OFF")
