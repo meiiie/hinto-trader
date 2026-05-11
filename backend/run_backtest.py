@@ -11,8 +11,11 @@ import asyncio
 import argparse
 import logging
 import csv
+import hashlib
+import json
 from datetime import datetime, timedelta, timezone
 import os
+import subprocess
 import sys
 from typing import Any, List, Dict, Tuple, Optional
 
@@ -96,6 +99,29 @@ from src.trading_contract import (
     PRODUCTION_USE_MAX_SL_VALIDATION,
     PRODUCTION_USE_MTF_TREND,
 )
+
+
+def _json_default(value: Any) -> str:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return str(value)
+
+
+def _git_commit() -> str:
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=current_dir,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+    except Exception:
+        return "unknown"
+
+
+def _stable_config_hash(config: Dict[str, Any]) -> str:
+    payload = json.dumps(config, sort_keys=True, default=_json_default, ensure_ascii=True)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
 
 # Setup logging
 logging.basicConfig(
@@ -1831,6 +1857,9 @@ async def main():
     # overwrite each other, and reuse the same stamp for all artifacts.
     run_stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     csv_filename = f"portfolio_backtest_{run_stamp}.csv"
+    equity_filename = f"equity_curve_{run_stamp}.csv" if equity_curve else None
+    replay_filename = f"replay_data_{run_stamp}.json" if args.visual and result.get("replay_data") else None
+    metadata_filename = f"experiment_{run_stamp}.json"
 
     # SOTA: Load timezone offset from .env (default: 7 for Vietnam)
     try:
@@ -1915,7 +1944,6 @@ async def main():
                 ])
         print(f"💾 Detailed trade log saved to: {csv_filename}")
         if equity_curve:
-            equity_filename = f"equity_curve_{run_stamp}.csv"
             write_equity_curve_csv(equity_filename, equity_curve, tz_offset_hours=tz_offset_hours)
             print(f"💾 Equity curve saved to: {equity_filename}")
 
@@ -1929,6 +1957,42 @@ async def main():
                 print(f"📽️  UI Replay Data saved to: {json_filename}")
             except Exception as e:
                 logger.error(f"Failed to save Replay JSON: {e}")
+
+        experiment_config = {
+            "argv": sys.argv[1:],
+            "args": vars(args),
+            "symbols": symbols,
+            "blocked_symbol_sides": blocked_symbol_sides,
+            "start_time_utc": start_time,
+            "end_time_utc": end_time,
+            "market_mode": market_mode.value,
+            "git_commit": _git_commit(),
+        }
+        metadata = {
+            "run_stamp": run_stamp,
+            "config_hash": _stable_config_hash(experiment_config),
+            "created_at_utc": datetime.now(timezone.utc),
+            "experiment_config": experiment_config,
+            "artifacts": {
+                "trades_csv": csv_filename,
+                "equity_csv": equity_filename,
+                "replay_json": replay_filename,
+            },
+            "summary": {
+                "initial_balance": stats.get("initial_balance"),
+                "final_balance": stats.get("final_balance"),
+                "net_return_pct": stats.get("net_return_pct"),
+                "net_return_usd": stats.get("net_return_usd"),
+                "total_trades": stats.get("total_trades"),
+                "win_rate": stats.get("win_rate"),
+                "max_drawdown_pct": calculate_max_drawdown_pct(equity_curve) if equity_curve else None,
+                "quality_filter_rejections": stats.get("quality_filter_rejections"),
+                "termination_reason": stats.get("termination_reason"),
+            },
+        }
+        with open(metadata_filename, "w", encoding="utf-8") as f:
+            json.dump(metadata, f, indent=2, default=_json_default, ensure_ascii=False)
+        print(f"Experiment metadata saved to: {metadata_filename}")
 
     except Exception as e:
         logger.error(f"Failed to save CSV: {e}")

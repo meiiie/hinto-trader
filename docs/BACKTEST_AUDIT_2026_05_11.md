@@ -112,9 +112,28 @@ The best 30-day variant is not strong enough to promote. It has lower drawdown
 and removes many low-quality fills, but `PF ~= 1.02` means the edge is too thin
 to survive small execution drift, fee changes, data issues, or overfitting.
 
+The same paper candidate over 60 days produced a positive return, but still did
+not clear promotion gates:
+
+- command profile: `--bounce-confirm --daily-symbol-loss-limit 2`
+- return: about `+6.4%`
+- trades: `135`
+- win rate: `40.74%`
+- profit factor: `1.07`
+- payoff: `1.56`
+- max drawdown: about `14.1%`
+- longest loss streak: `7`
+- decision: reject for promotion, continue paper-only research
+
+This is an improvement over the baseline, but still not a robust edge. A profit
+factor near `1.07` can disappear with small fee, spread, latency, or fill-quality
+drift.
+
 Parallel-run note: `run_backtest.py` now writes output artifacts with
 microsecond timestamps and reuses one run stamp for trade, equity, and replay
 files. This prevents simultaneous research jobs from overwriting each other.
+It also emits `experiment_*.json` metadata locally with argv, resolved args,
+symbols, window, git commit, config hash, summary metrics, and artifact names.
 
 ## Next Research Steps
 
@@ -122,6 +141,8 @@ files. This prevents simultaneous research jobs from overwriting each other.
   setting;
 - keep the best current candidate as paper-only:
   `--bounce-confirm --daily-symbol-loss-limit 2`;
+- use the generated `experiment_*.json` metadata to compare future runs by
+  config hash instead of screenshots or memory;
 - add per-symbol quarantine rules only after repeated out-of-sample evidence;
 - test a regime router that allows mean reversion only in range conditions;
 - continue the `liquidity_reclaim_trend_runner` track, but improve selectivity

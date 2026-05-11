@@ -61,6 +61,11 @@ This moves Hinto from "badly unsafe" toward "paper-observable", not toward live
 money. The right interpretation is that bounce confirmation may reduce false
 mean-reversion entries, while the remaining edge is too thin to trust.
 
+Sixty-day follow-up of the same paper candidate improved to about `+6.4%` with
+`135` trades and max drawdown around `14.1%`, but profit factor was only `1.07`.
+That is still below the promotion threshold. Treat it as a monitored paper
+candidate, not a live strategy.
+
 ## Research Tracks
 
 ### Track A: Mean-Reversion Scalper
@@ -183,6 +188,9 @@ Phase 3: Experiment discipline
   and code commit.
 - Avoid parallel output collisions; backtest artifacts now use microsecond run
   stamps so trade logs, equity curves, and replay files remain tied together.
+- `run_backtest.py` writes local `experiment_*.json` metadata for each run;
+  these files are ignored by Git and should be copied into reports only when a
+  specific result is promoted for discussion.
 - Report R-multiple distribution, payoff skew, profit factor, max drawdown,
   regime contribution, and bootstrap/Monte Carlo robustness.
 - Reject experiments that improve PnL only by increasing leverage.

@@ -82,6 +82,7 @@ backend/data/market_intelligence.json
 data/cache/volume_rankings/
 portfolio_backtest_*.csv
 backend/portfolio_backtest_*.csv
+backend/experiment_*.json
 run_bt.bat
 
 # Temp output files
