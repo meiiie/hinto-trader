@@ -272,6 +272,48 @@ files. This prevents simultaneous research jobs from overwriting each other.
 It also emits `experiment_*.json` metadata locally with argv, resolved args,
 symbols, window, git commit, config hash, summary metrics, and artifact names.
 
+## Top-50 Universe Follow-Up
+
+An explicit `--top 50` backtest now overrides local paper `.env` fixed-symbol
+settings. Before this fix, `USE_FIXED_SYMBOLS=true` could silently shrink a
+top-N research run back to the paper watchlist, which made broad-universe tests
+look cleaner than they really were.
+
+Top-50 smoke command:
+
+```bash
+cd backend
+python run_backtest.py \
+  --top 50 --start 2026-05-07 --end 2026-05-11 \
+  --balance 100 --risk 0.01 --leverage 20 --max-pos 3 \
+  --no-compound --full-tp --maker-orders \
+  --bounce-confirm --daily-symbol-loss-limit 2
+```
+
+Result:
+
+- requested universe: `50` historical top-volume Binance futures symbols
+- eligible after quality filter: `27`
+- rejected by quality filter: `23`
+- return: about `-6.5%`
+- trades: `15`
+- win rate: `26.67%`
+- profit factor: about `0.50`
+- max drawdown: about `6.5%`
+- bootstrap positive-expectancy probability: about `9%`
+- decision: `REJECT`
+
+Interpretation: the current strategy does not improve by widening to raw top50.
+The broad universe adds weak/noisy altcoin behavior and reduces fill quality.
+This rejected checkpoint produced no paper runtime suggestion, so the current
+paper-observation config remains the narrower `ETHUSDT, BNBUSDT, XRPUSDT`
+checkpoint `81a0c75dbfbe`.
+
+The run also exposed a speed issue: ranking-volume cache paths used to depend
+on the caller's current working directory. The volume ranking cache is now
+anchored under `backend/data/cache/volume_rankings`, matching the rest of the
+historical data cache.
+
 ## Next Research Steps
 
 - collect at least 200 paper/backtest-comparable trades before promoting any

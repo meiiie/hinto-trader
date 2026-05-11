@@ -264,58 +264,43 @@ def _resolve_symbols(
     elif args.symbols:
         symbols = [s.strip().upper() for s in args.symbols.split(",")]
     elif requested_top:
-        use_fixed = os.getenv("USE_FIXED_SYMBOLS", "false").lower() == "true"
+        print(f"ðŸ” Calculating top {requested_top} volume pairs at START DATE (dynamic mode)...")
 
-        if use_fixed:
-            print("ðŸ”’ Loading FIXED symbol list from .env (USE_FIXED_SYMBOLS=true)...")
-            backtest_symbols_str = os.getenv("BACKTEST_SYMBOLS", "")
+        from src.infrastructure.data.historical_volume_service import HistoricalVolumeService
 
-            if backtest_symbols_str:
-                symbols = [s.strip().upper() for s in backtest_symbols_str.split(",")]
-                symbols = symbols[:requested_top]
-                print(f"ðŸ“‹ Fixed symbols ({len(symbols)}): {symbols[:5]}...")
-            else:
-                print("âš ï¸ BACKTEST_SYMBOLS is empty in .env, falling back to dynamic mode")
-                use_fixed = False
+        volume_service = HistoricalVolumeService(market_mode=market_mode)
+        if args.fill_top_eligible:
+            candidate_limit = max(requested_top * 5, 100)
+            symbols, rejected_candidates = volume_service.get_top_eligible_symbols_at_date(
+                date=start_time,
+                limit=requested_top,
+                eligibility_fn=lambda sym: quality_filter.is_eligible(sym, as_of=start_time),
+                candidate_limit=candidate_limit,
+            )
+        else:
+            rejected_candidates = []
+            symbols = volume_service.get_top_symbols_at_date(
+                date=start_time,
+                limit=requested_top,
+            )
 
-        if not use_fixed:
-            print(f"ðŸ” Calculating top {requested_top} volume pairs at START DATE (dynamic mode)...")
-
-            from src.infrastructure.data.historical_volume_service import HistoricalVolumeService
-
-            volume_service = HistoricalVolumeService(market_mode=market_mode)
+        if not symbols:
+            print("âš ï¸ Historical volume fetch failed, using current top pairs...")
+            client = BinanceRestClient(market_mode=market_mode)
+            symbols = client.get_top_volume_pairs(limit=requested_top, quote_asset="USDT")
+        else:
             if args.fill_top_eligible:
-                candidate_limit = max(requested_top * 5, 100)
-                symbols, rejected_candidates = volume_service.get_top_eligible_symbols_at_date(
-                    date=start_time,
-                    limit=requested_top,
-                    eligibility_fn=lambda sym: quality_filter.is_eligible(sym, as_of=start_time),
-                    candidate_limit=candidate_limit,
+                rejected_count = len(rejected_candidates)
+                print(
+                    f"ðŸ“Š Top eligible {len(symbols)}/{requested_top} at {start_time.date()}: {symbols[:5]}..."
                 )
-            else:
-                rejected_candidates = []
-                symbols = volume_service.get_top_symbols_at_date(
-                    date=start_time,
-                    limit=requested_top,
-                )
-
-            if not symbols:
-                print("âš ï¸ Historical volume fetch failed, using current top pairs...")
-                client = BinanceRestClient(market_mode=market_mode)
-                symbols = client.get_top_volume_pairs(limit=requested_top, quote_asset="USDT")
-            else:
-                if args.fill_top_eligible:
-                    rejected_count = len(rejected_candidates)
+                if rejected_count > 0:
                     print(
-                        f"ðŸ“Š Top eligible {len(symbols)}/{requested_top} at {start_time.date()}: {symbols[:5]}..."
+                        f"ðŸ§¹ Preselection filter: scanned {min(candidate_limit, max(len(symbols) + rejected_count, 0))} "
+                        f"ranked symbols | rejected {rejected_count}"
                     )
-                    if rejected_count > 0:
-                        print(
-                            f"ðŸ§¹ Preselection filter: scanned {min(candidate_limit, max(len(symbols) + rejected_count, 0))} "
-                            f"ranked symbols | rejected {rejected_count}"
-                        )
-                else:
-                    print(f"ðŸ“Š Top {requested_top} at {start_time.date()}: {symbols[:5]}...")
+            else:
+                print(f"ðŸ“Š Top {requested_top} at {start_time.date()}: {symbols[:5]}...")
     else:
         symbols = ["BTCUSDT"]
 
@@ -872,8 +857,9 @@ async def main():
     elif args.symbols:
         symbols = [s.strip().upper() for s in args.symbols.split(",")]
     elif args.top:
-        # SOTA: Check if USE_FIXED_SYMBOLS is enabled in .env
-        use_fixed = os.getenv("USE_FIXED_SYMBOLS", "false").lower() == "true"
+        # An explicit --top request is a research universe override. Paper
+        # BACKTEST_SYMBOLS are only for fixed-symbol runs via --symbols.
+        use_fixed = False
 
         if use_fixed:
             # Load from BACKTEST_SYMBOLS in .env (avoids look-ahead bias)

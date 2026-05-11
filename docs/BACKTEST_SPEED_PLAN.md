@@ -11,9 +11,13 @@ Observed on a warm local cache:
 - 60-day 5-symbol candidate: about `40s`
 - 120-day 5-symbol candidate: about `69s`
 - 120-day 5-symbol baseline: about `103s`
+- 4-day dynamic top50 candidate: about `700s`
 
 The current engine is event-driven and uses 1m monitoring for SL/TP parity with
 paper/live behavior. That realism is worth keeping for final acceptance tests.
+The dynamic top50 run is much slower because it expands the candidate universe
+and validates more symbol history. Keep broad-universe runs as targeted
+research checks until pre-screening and cache warmup improve.
 
 ## Safe Acceleration Path
 

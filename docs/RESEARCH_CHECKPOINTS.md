@@ -74,3 +74,8 @@ rejected experiment, not applied to paper runtime.
 The best current major-universe experiment is still rejected by the stricter
 bootstrap gate and by stress-check confidence. It is useful for continued
 paper observation, but not for promotion or live money.
+
+The 2026-05-11 dynamic top50 smoke test was also rejected: `50` requested
+symbols collapsed to `27` quality-filter-eligible symbols, returned about
+`-6.5%` over four days, and had only about `9%` bootstrap positive-expectancy
+probability. No paper runtime settings were changed from that checkpoint.
