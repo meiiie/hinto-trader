@@ -69,6 +69,7 @@ AGENTS.md
 
 # Database
 *.db
+*.db.checkpoint-backup-*
 *.sqlite
 *.sqlite3
 backend/data/cache/**/*.parquet

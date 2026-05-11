@@ -29,7 +29,20 @@ python backend/scripts/apply_paper_checkpoint.py \
 ```
 
 The apply script refuses `REJECT`, only updates paper allowlist keys, preserves
-secrets, and creates a timestamped `.env` backup.
+secrets, syncs the local paper SQLite runtime settings that override `.env`,
+and creates timestamped backups.
+
+For a fresh paper observation run with no old paper positions:
+
+```bash
+python backend/scripts/apply_paper_checkpoint.py \
+  backend/research_checkpoints/checkpoint_YYYYMMDD_HHMMSS_hash.json \
+  --reset-paper-state
+```
+
+`--reset-paper-state` clears paper-only positions and local signal lifecycle
+rows, then resets the local simulated wallet from `PAPER_START_BALANCE`. It does
+not touch exchange orders.
 
 When metadata includes both `requested_symbols` and `eligible_symbols`, paper
 suggestions use `eligible_symbols`. This prevents a runtime paper config from
