@@ -1827,8 +1827,10 @@ async def main():
 
     print("="*60 + "\n")
 
-    # 6. Export to CSV
-    csv_filename = f"portfolio_backtest_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    # 6. Export to CSV. Include microseconds so parallel research runs do not
+    # overwrite each other, and reuse the same stamp for all artifacts.
+    run_stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    csv_filename = f"portfolio_backtest_{run_stamp}.csv"
 
     # SOTA: Load timezone offset from .env (default: 7 for Vietnam)
     try:
@@ -1913,13 +1915,13 @@ async def main():
                 ])
         print(f"💾 Detailed trade log saved to: {csv_filename}")
         if equity_curve:
-            equity_filename = f"equity_curve_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            equity_filename = f"equity_curve_{run_stamp}.csv"
             write_equity_curve_csv(equity_filename, equity_curve, tz_offset_hours=tz_offset_hours)
             print(f"💾 Equity curve saved to: {equity_filename}")
 
         # SOTA (Jan 2026): Export Replay Data JSON if enabled
         if args.visual and 'replay_data' in result and result['replay_data']:
-            json_filename = f"replay_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            json_filename = f"replay_data_{run_stamp}.json"
             try:
                 import json
                 with open(json_filename, 'w', encoding='utf-8') as f:

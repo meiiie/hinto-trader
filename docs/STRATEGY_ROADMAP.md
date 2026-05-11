@@ -47,6 +47,20 @@ filter, the same core set improved to roughly `-5.4%` over the four-day window,
 with max drawdown down to about `9%`. This is better risk containment, not
 proof of edge.
 
+Thirty-day follow-up:
+
+- baseline contract defaults: about `-7.4%`, profit factor `0.90`, longest loss
+  streak `16`;
+- direction blocking reduced losses to about `-3.1%`, but did not create a
+  positive edge;
+- BTC regime/impulse filtering made results worse on this sample;
+- `--bounce-confirm --daily-symbol-loss-limit 2` was the best candidate, about
+  `+1.0%` with profit factor `1.02` and about `10.8%` max drawdown.
+
+This moves Hinto from "badly unsafe" toward "paper-observable", not toward live
+money. The right interpretation is that bounce confirmation may reduce false
+mean-reversion entries, while the remaining edge is too thin to trust.
+
 ## Research Tracks
 
 ### Track A: Mean-Reversion Scalper
@@ -67,6 +81,19 @@ Kill criteria:
 - net expectancy is positive only with maker assumptions;
 - more than 40% of profit comes from one symbol cluster or one market regime;
 - drawdown recovers only by increasing leverage or widening stops.
+
+Current paper candidate:
+
+```bash
+python backend/run_backtest.py \
+  --top 30 --days 30 --balance 100 --risk 0.01 --leverage 20 \
+  --max-pos 4 --no-compound --full-tp --maker-orders \
+  --bounce-confirm --daily-symbol-loss-limit 2
+```
+
+Do not add symbol-side quarantine or broad hour exclusions to production based
+on the current 30-day sample. They either reduced returns or looked like
+sample-specific curve fitting.
 
 ### Track B: Positive-Skew Trend Runner
 
@@ -154,6 +181,8 @@ Phase 3: Experiment discipline
 
 - Store every experiment with config hash, data window, symbols, fees, slippage,
   and code commit.
+- Avoid parallel output collisions; backtest artifacts now use microsecond run
+  stamps so trade logs, equity curves, and replay files remain tied together.
 - Report R-multiple distribution, payoff skew, profit factor, max drawdown,
   regime contribution, and bootstrap/Monte Carlo robustness.
 - Reject experiments that improve PnL only by increasing leverage.

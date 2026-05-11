@@ -82,10 +82,46 @@ Hinto is safer for continued paper-real observation after the cleanup, but it is
 not ready for live money. The current strategy is near break-even on the wider
 sample and still negative on the core sample. Keep paper trading only.
 
+## 30-Day Robustness Check
+
+Run family: fixed Binance futures universe, `$100` balance, `1%` account risk,
+`20x` margin model, max four positions, no compounding, full TP, maker entries
+and maker TP with taker stops.
+
+Baseline contract defaults over 30 days:
+
+- return: about `-7.4%`
+- trades: `114`
+- win rate: `36.84%`
+- profit factor: `0.90`
+- payoff: `1.55`
+- longest loss streak: `16`
+- max drawdown: about `25%`
+- decision: reject for promotion
+
+Risk-filter variants:
+
+- daily symbol loss limit: still about `-7.8%`
+- symbol-side quarantine: improved to about `-4.7%`, but still negative
+- direction block: improved to about `-3.1%`, but still negative
+- BTC regime + impulse filter: worse, about `-13.4%`
+- bounce confirmation + daily symbol loss limit: about `+1.0%`, `69` trades,
+  `39.13%` win rate, `1.02` profit factor, about `10.8%` drawdown
+
+The best 30-day variant is not strong enough to promote. It has lower drawdown
+and removes many low-quality fills, but `PF ~= 1.02` means the edge is too thin
+to survive small execution drift, fee changes, data issues, or overfitting.
+
+Parallel-run note: `run_backtest.py` now writes output artifacts with
+microsecond timestamps and reuses one run stamp for trade, equity, and replay
+files. This prevents simultaneous research jobs from overwriting each other.
+
 ## Next Research Steps
 
 - collect at least 200 paper/backtest-comparable trades before promoting any
   setting;
+- keep the best current candidate as paper-only:
+  `--bounce-confirm --daily-symbol-loss-limit 2`;
 - add per-symbol quarantine rules only after repeated out-of-sample evidence;
 - test a regime router that allows mean reversion only in range conditions;
 - continue the `liquidity_reclaim_trend_runner` track, but improve selectivity
