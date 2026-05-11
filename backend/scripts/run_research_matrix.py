@@ -94,6 +94,24 @@ def _cases(days: int | None, start: str | None, end: str | None, symbols: str | 
                 ]
             ),
         ),
+        ResearchCase(
+            "bounce_taker_fee_stress",
+            tuple([*base, "--bounce-confirm", "--daily-symbol-loss-limit", "2"]),
+        ),
+        ResearchCase(
+            "bounce_fill_buffer_stress",
+            tuple(
+                [
+                    *base,
+                    "--maker-orders",
+                    "--fill-buffer",
+                    "0.02",
+                    "--bounce-confirm",
+                    "--daily-symbol-loss-limit",
+                    "2",
+                ]
+            ),
+        ),
     ]
 
 

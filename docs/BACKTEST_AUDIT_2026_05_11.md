@@ -188,6 +188,17 @@ stronger experiment than the broad universe because it avoids weaker altcoin
 behavior and retains the filters that survived ablation, but it is not yet
 mathematically stable enough to call "good".
 
+Stress follow-up on the same 120-day major-universe experiment:
+
+- taker-fee/no-maker stress: `+15.7%`, PF `1.19`, bootstrap positive
+  expectancy probability about `83%`, reject
+- maker plus `0.02%` fill-buffer stress: `+16.1%`, PF `1.20`, bootstrap
+  positive expectancy probability about `84%`, reject
+
+These stress runs support the same decision: do not adjust runtime paper
+configuration yet. A checkpoint was created for each stress result, and both
+correctly produced no `paper_env_suggestion`.
+
 Parallel-run note: `run_backtest.py` now writes output artifacts with
 microsecond timestamps and reuses one run stamp for trade, equity, and replay
 files. This prevents simultaneous research jobs from overwriting each other.
@@ -202,6 +213,8 @@ symbols, window, git commit, config hash, summary metrics, and artifact names.
   `--bounce-confirm --daily-symbol-loss-limit 2`;
 - use the generated `experiment_*.json` metadata to compare future runs by
   config hash instead of screenshots or memory;
+- create `backend/research_checkpoints/checkpoint_*.json` for notable results;
+  if a checkpoint decision is `REJECT`, paper runtime config must not change;
 - add per-symbol quarantine rules only after repeated out-of-sample evidence;
 - test a regime router that allows mean reversion only in range conditions;
 - continue the `liquidity_reclaim_trend_runner` track, but improve selectivity

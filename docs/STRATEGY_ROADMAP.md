@@ -84,6 +84,12 @@ far below 1,000 out-of-sample trades and one 30-day walk-forward window was
 blocked by missing 1m data coverage rather than forced through with incomplete
 intrabar information.
 
+Stress checks did not rescue the decision: taker-fee/no-maker and `0.02%`
+fill-buffer stress variants stayed profitable in headline PnL, but their
+bootstrap positive-expectancy probabilities were still only about `83-84%`.
+That keeps the status at reject for promotion and no automatic paper config
+change.
+
 ## Research Tracks
 
 ### Track A: Mean-Reversion Scalper
@@ -214,6 +220,9 @@ Phase 3: Experiment discipline
 - `scripts/run_research_matrix.py` runs named strategy cases and records
   elapsed time plus audit output. Use it for ablations and symbol-universe
   comparisons before touching production defaults.
+- `scripts/checkpoint_research.py` creates local checkpoints from experiment
+  metadata. If the checkpoint decision is `REJECT`, paper runtime configuration
+  must not change.
 - Report R-multiple distribution, payoff skew, profit factor, max drawdown,
   regime contribution, and bootstrap/Monte Carlo robustness.
 - Reject experiments that improve PnL only by increasing leverage.
