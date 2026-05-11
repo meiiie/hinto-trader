@@ -55,12 +55,14 @@ from ...infrastructure.notifications.telegram_service import (
 from ...trading_contract import (
     PRODUCTION_AUTO_CLOSE_INTERVAL,
     PRODUCTION_CLOSE_PROFITABLE_AUTO,
+    PRODUCTION_LEVERAGE,
     PRODUCTION_LIMIT_CHASE_TIMEOUT_SECONDS,
     PRODUCTION_MAX_SL_PCT,
     PRODUCTION_ORDER_TTL_MINUTES,
     PRODUCTION_ORDER_TYPE,
     PRODUCTION_PORTFOLIO_TARGET_PCT,
     PRODUCTION_PROFITABLE_THRESHOLD_PCT,
+    clamp_runtime_leverage,
 )
 
 
@@ -170,7 +172,7 @@ class LiveTradingService:
         mode: TradingMode = TradingMode.TESTNET,
         risk_per_trade: float = 0.01,  # 1% risk per trade
         max_positions: int = 4,  # DATA-DRIVEN: pos4 optimal (Feb 23 sweep: pos3=PT-dependent, pos5=diluted)
-        max_leverage: int = 20,  # v6.6.0: Match production 20x (validated Feb 23 sweep)
+        max_leverage: int = PRODUCTION_LEVERAGE,
         max_drawdown_pct: float = 0.15,  # 15% max drawdown
         enable_trading: bool = True,
         settings_repo = None,  # SOTA: Optional IOrderRepository for Settings sync
@@ -309,7 +311,7 @@ class LiveTradingService:
             try:
                 settings = settings_repo.get_all_settings()
                 self.max_positions = int(settings.get('max_positions', max_positions))
-                self.max_leverage = int(settings.get('leverage', max_leverage))
+                self.max_leverage = clamp_runtime_leverage(settings.get('leverage', max_leverage))
                 self.risk_per_trade = float(settings.get('risk_percent', risk_per_trade * 100)) / 100
                 # SOTA: Load Smart Recycling setting (handle str or bool)
                 # SOTA SYNC (Jan 2026): Default TRUE to match backtest --zombie-killer
@@ -399,14 +401,14 @@ class LiveTradingService:
             except Exception as e:
                 self.logger.warning(f"⚠️ Failed to load settings: {e}. Using defaults.")
                 self.max_positions = max_positions
-                self.max_leverage = max_leverage
+                self.max_leverage = clamp_runtime_leverage(max_leverage)
                 self.risk_per_trade = risk_per_trade
                 self.enable_recycling = False
                 self.order_ttl_minutes = PRODUCTION_ORDER_TTL_MINUTES
         else:
             # No settings repo - use parameters directly
             self.max_positions = max_positions
-            self.max_leverage = max_leverage
+            self.max_leverage = clamp_runtime_leverage(max_leverage)
             self.risk_per_trade = risk_per_trade
             # SOTA SYNC (Jan 2026): Default FALSE to match backtest (--zombie-killer OFF by default)
             self.enable_recycling = False  # ✅ FIX: Match backtest default (--zombie-killer must be explicitly enabled)
@@ -2977,7 +2979,7 @@ class LiveTradingService:
 
         # SOTA (Jan 2026): Robust Casting & Error Handling
         try:
-            leverage = float(settings.get('leverage', self.max_leverage))
+            leverage = float(clamp_runtime_leverage(settings.get('leverage', self.max_leverage)))
 
             # Get cached balance for sizing
             # BUG FIX (Feb 2026): Use WALLET balance (total), NOT available balance
@@ -8416,7 +8418,7 @@ class LiveTradingService:
             self.logger.info(f"⚙️ max_positions updated to {self.max_positions}")
 
         if "leverage" in settings:
-            self.max_leverage = int(settings["leverage"])
+            self.max_leverage = clamp_runtime_leverage(settings["leverage"])
             self.logger.info(f"⚙️ max_leverage updated to {self.max_leverage}")
 
         if "auto_execute" in settings:

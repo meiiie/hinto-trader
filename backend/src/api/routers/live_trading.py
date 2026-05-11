@@ -20,6 +20,7 @@ from src.config.runtime import (
     is_exchange_ordering_enabled,
     is_real_ordering_enabled,
 )
+from src.trading_contract import PRODUCTION_LEVERAGE, PRODUCTION_MAX_LEVERAGE
 from ...application.services.live_trading_service import (
     LiveTradingService,
     TradingMode,
@@ -66,7 +67,12 @@ class StartTradingRequest(BaseModel):
     mode: str = Field("testnet", description="Trading mode: paper, testnet, live")
     risk_per_trade: float = Field(0.01, ge=0.001, le=0.05, description="Risk per trade (0.01 = 1%)")
     max_positions: int = Field(5, ge=1, le=10, description="Maximum concurrent positions")
-    max_leverage: int = Field(10, ge=1, le=20, description="Maximum leverage")
+    max_leverage: int = Field(
+        PRODUCTION_LEVERAGE,
+        ge=1,
+        le=PRODUCTION_MAX_LEVERAGE,
+        description=f"Maximum leverage (1-{PRODUCTION_MAX_LEVERAGE}x)",
+    )
     confirm_production: bool = Field(False, description="Must be true for live mode")
 
 

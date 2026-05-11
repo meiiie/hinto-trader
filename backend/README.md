@@ -34,7 +34,7 @@ Binance WebSocket -> SharedBinanceClient -> SignalGenerator (Liquidity Sniper)
 
 | Parameter | Value |
 |-----------|-------|
-| Leverage | 20x |
+| Leverage | 2x runtime ceiling |
 | Max Positions | 4 |
 | Symbols | Curated watchlist from DB/.env |
 | Lookback | 15 |
@@ -70,6 +70,7 @@ For Binance-first validation without order risk, keep:
 ```env
 ENV=paper
 HINTO_PAPER_REAL=true
+PAPER_LEVERAGE=2
 ```
 
 This uses live Binance market data with local simulated fills. `/system/config`
@@ -85,8 +86,8 @@ python run_backend.py
 
 # Backtest (use the same curated watchlist as live)
 python run_backtest.py \
-  --symbols "LINKUSDT,DOTUSDT,TONUSDT,APTUSDT,VIRTUALUSDT,ZROUSDT,AVAXUSDT,ETHUSDT,BCHUSDT,SUIUSDT,LTCUSDT,SOLUSDT" \
-  --days 20 --balance 20 --leverage 20 --max-pos 4 --ttl 50 \
+  --symbols "ETHUSDT,BNBUSDT,XRPUSDT" \
+  --days 20 --balance 100 --leverage 2 --max-pos 3 --ttl 50 \
   --full-tp --close-profitable-auto --profitable-threshold-pct 20 \
   --portfolio-target-pct 10 --max-sl-validation --max-sl-pct 1.2 \
   --breakeven-r 1.5 --trailing-atr 4.0 --no-compound \

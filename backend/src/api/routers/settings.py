@@ -18,6 +18,7 @@ from src.trading_contract import (
     PRODUCTION_BLOCKED_WINDOWS_STR,
     PRODUCTION_CB_MAX_DAILY_DRAWDOWN_PCT,
     PRODUCTION_LIMIT_CHASE_TIMEOUT_SECONDS,
+    PRODUCTION_MAX_LEVERAGE,
     PRODUCTION_ORDER_TTL_MINUTES,
     PRODUCTION_ORDER_TYPE,
     PRODUCTION_PORTFOLIO_TARGET_PCT,
@@ -39,7 +40,12 @@ class SettingsUpdate(BaseModel):
     risk_percent: Optional[float] = Field(None, ge=0.1, le=10.0, description="Risk per trade (0.1-10%)")
     # NOTE: rr_ratio removed - backtest uses SL/TP from strategy signal
     max_positions: Optional[int] = Field(None, ge=1, le=10, description="Max concurrent positions")
-    leverage: Optional[int] = Field(None, ge=1, le=20, description="Leverage (1-20x)")
+    leverage: Optional[int] = Field(
+        None,
+        ge=1,
+        le=PRODUCTION_MAX_LEVERAGE,
+        description=f"Leverage (1-{PRODUCTION_MAX_LEVERAGE}x)",
+    )
     auto_execute: Optional[bool] = Field(None, description="Auto-execute signals")
     execution_ttl_minutes: Optional[int] = Field(
         None,

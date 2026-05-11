@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Dict, List
 
-PRODUCTION_LEVERAGE = 20
+PRODUCTION_LEVERAGE = 2
+PRODUCTION_MAX_LEVERAGE = 2
 PRODUCTION_MAX_POSITIONS = 4
 PRODUCTION_ORDER_TTL_MINUTES = 50
 PRODUCTION_RISK_PER_TRADE = 0.01
@@ -108,6 +109,15 @@ def get_production_blocked_windows() -> List[Dict[str, str]]:
 def get_production_symbol_blacklist() -> List[str]:
     """Return the production blacklist used by deploy/runtime safety layers."""
     return list(PRODUCTION_SYMBOL_BLACKLIST)
+
+
+def clamp_runtime_leverage(leverage: object) -> int:
+    """Clamp runtime leverage to Hinto's current paper/live safety ceiling."""
+    try:
+        parsed = int(float(leverage))
+    except (TypeError, ValueError):
+        parsed = PRODUCTION_LEVERAGE
+    return max(1, min(parsed, PRODUCTION_MAX_LEVERAGE))
 
 
 def parse_blocked_windows(blocked_windows: str) -> List[Dict[str, str]]:

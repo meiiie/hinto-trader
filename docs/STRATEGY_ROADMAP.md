@@ -19,8 +19,8 @@ large losses" if it is promoted based on win rate alone.
 
 ## May 2026 Paper Audit
 
-Four-day Binance Futures backtests were run with paper-like settings: 1m
-monitoring, maker/taker fees, funding, max four positions, 20x margin model,
+Four-day Binance Futures backtests were initially run with paper-like settings: 1m
+monitoring, maker/taker fees, funding, max four positions, a historical 20x margin model,
 1% account-risk cap, MTF trend filter, and volume-delta divergence filter.
 
 Core 12-symbol result with the previous default (`AUTO_CLOSE` at `20% ROE`):
@@ -99,6 +99,27 @@ bootstrap positive-expectancy probabilities were still only about `83-84%`.
 That keeps the status at reject for promotion and no automatic paper config
 change.
 
+Leverage policy was tightened after the paper-real audit. Hinto's runtime
+ceiling is now `2x`, and API/UI/checkpoint application paths clamp higher
+values before they can reach paper or live execution. At `2x` on a `$100`
+paper wallet with `max-pos 3`, each full slot is roughly `$33` margin and
+about `$66` notional, while the `1%` risk cap still targets about `$1` account
+risk before fees/slippage.
+
+The 2x retest supports a narrow paper universe only:
+
+- `ETHUSDT, BNBUSDT, XRPUSDT`, 30 days, `bounce_daily2`: about `+6.4%`,
+  `22` trades, PF `1.89`, max drawdown about `3.6%`, still
+  `PAPER_ONLY_SMALL_SAMPLE`;
+- same narrow universe, 4 short walk-forward windows: `bounce_daily2` had
+  `4/4` positive windows but only `13` trades, so the stability label remains
+  `FRAGILE`;
+- 10-token no-DOGE universe at 2x: rejected across short walk-forward and
+  30-day checks; wider symbols added noise and worse drawdown.
+
+Current interpretation: `2x + ETH/BNB/XRP + bounce confirmation + daily
+symbol loss limit` is acceptable for paper observation, not live promotion.
+
 ## Research Tracks
 
 ### Track A: Mean-Reversion Scalper
@@ -124,9 +145,9 @@ Current paper experiment:
 
 ```bash
 python backend/run_backtest.py \
-  --symbols BTCUSDT,ETHUSDT,BNBUSDT,SOLUSDT,XRPUSDT \
-  --days 120 --balance 100 --risk 0.01 --leverage 20 \
-  --max-pos 4 --no-compound --full-tp --maker-orders \
+  --symbols ETHUSDT,BNBUSDT,XRPUSDT \
+  --days 120 --balance 100 --risk 0.01 --leverage 2 \
+  --max-pos 3 --no-compound --full-tp --maker-orders \
   --bounce-confirm --daily-symbol-loss-limit 2
 ```
 
@@ -166,8 +187,8 @@ Example:
 ```bash
 python backend/run_backtest.py \
   --strategy-id liquidity_reclaim_trend_runner \
-  --top 40 --days 30 --balance 50 --leverage 20 \
-  --max-pos 4 --no-compound --1m-monitoring --fill-buffer 0 \
+  --top 40 --days 30 --balance 100 --leverage 2 \
+  --max-pos 3 --no-compound --1m-monitoring --fill-buffer 0 \
   --max-sl-validation --max-sl-pct 1.2
 ```
 

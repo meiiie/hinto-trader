@@ -10,8 +10,8 @@ approval.
 - market: Binance USDT-M futures
 - balance: `$100`
 - risk cap: `1%` account risk per trade
-- leverage: `20x` margin model
-- max positions: `4`
+- leverage: `2x` runtime ceiling
+- max positions: `3` for the current paper-observation preset
 - entries: limit sniper mean reversion
 - exits: full TP at TP1, no early auto-close, 1m monitoring
 - fees: maker entries/TP, taker stops
@@ -85,8 +85,8 @@ sample and still negative on the core sample. Keep paper trading only.
 ## 30-Day Robustness Check
 
 Run family: fixed Binance futures universe, `$100` balance, `1%` account risk,
-`20x` margin model, max four positions, no compounding, full TP, maker entries
-and maker TP with taker stops.
+historical `20x` margin model, max four positions, no compounding, full TP,
+maker entries and maker TP with taker stops.
 
 Baseline contract defaults over 30 days:
 
@@ -235,7 +235,7 @@ Current paper-observation checkpoint experiment:
 ```bash
 python backend/run_backtest.py \
   --symbols ETHUSDT,BNBUSDT,XRPUSDT \
-  --start 2026-01-24T00:00:00+00:00 --balance 100 --risk 0.01 --leverage 20 \
+  --start 2026-01-24T00:00:00+00:00 --balance 100 --risk 0.01 --leverage 2 \
   --max-pos 3 --no-compound --full-tp --maker-orders \
   --bounce-confirm --daily-symbol-loss-limit 2
 ```
@@ -285,7 +285,7 @@ Top-50 smoke command:
 cd backend
 python run_backtest.py \
   --top 50 --start 2026-05-07 --end 2026-05-11 \
-  --balance 100 --risk 0.01 --leverage 20 --max-pos 3 \
+  --balance 100 --risk 0.01 --leverage 2 --max-pos 3 \
   --no-compound --full-tp --maker-orders \
   --bounce-confirm --daily-symbol-loss-limit 2
 ```
@@ -471,6 +471,43 @@ without resetting the paper wallet:
 The pending orders are local simulated orders only. They use live Binance
 market data for price movement, but `/system/config.real_ordering_enabled`
 remains `false`.
+
+## 2x Leverage Retest
+
+Runtime leverage is now capped at `2x` across Paper settings, Live start
+requests, API backtest requests, frontend Settings, and checkpoint application.
+Higher leverage can no longer be selected through the app UI or normal runtime
+API paths.
+
+Short walk-forward, `ETHUSDT, BNBUSDT, XRPUSDT`, `$100`, `1%` risk, `2x`,
+`max-pos 3`:
+
+- `bounce_daily2`: `4/4` positive windows, average return about `+1.0%`, max
+  drawdown about `1.5%`, only `13` trades, decision `FRAGILE`;
+- `baseline_contract`: one rejected negative window, decision `REJECT`;
+- `trend_runner`: rejected due weak/negative windows.
+
+The same `2x` short walk-forward on the 10-token no-DOGE universe rejected all
+cases. The best case still had a negative window around `-3.5%`.
+
+Thirty-day recent-window matrix, `2026-04-11 -> 2026-05-11`:
+
+- narrow `ETH/BNB/XRP`, `bounce_daily2`: about `+6.4%`, `22` trades, PF
+  `1.89`, max drawdown about `3.6%`, bootstrap positive-expectancy probability
+  about `91.7%`, decision `PAPER_ONLY_SMALL_SAMPLE`;
+- narrow `ETH/BNB/XRP`, `baseline_contract`: about `+9.2%`, `42` trades, PF
+  `1.60`, max drawdown about `5.5%`, decision `PAPER_ONLY_SMALL_SAMPLE`;
+- 10-token no-DOGE universe, `bounce_daily2`: about `-1.3%`, `44` trades,
+  PF `0.95`, max drawdown about `9.5%`, decision `REJECT`;
+- 10-token no-DOGE universe, `bounce_time_shield`: about `+4.1%`, `20`
+  trades, PF `1.60`, but still `PAPER_ONLY_SMALL_SAMPLE` and too filtered to
+  promote.
+
+Decision: keep Paper on `2x`, `$100`, `max-pos 3`, and the narrow
+`ETHUSDT, BNBUSDT, XRPUSDT` universe. Prefer `bounce_daily2` for paper
+observation because it has lower drawdown than baseline and survived the
+short-window stability check better, even though the 30-day baseline slice had
+higher headline return. Do not expand to 10 tokens yet.
 
 ## Next Research Steps
 

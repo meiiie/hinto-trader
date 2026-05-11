@@ -70,6 +70,7 @@ def test_apply_checkpoint_syncs_paper_db_settings(tmp_path):
                 "paper_env_suggestion": {
                     "SYMBOLS": "ETHUSDT,BNBUSDT,XRPUSDT",
                     "PAPER_RISK_PERCENT": "0.01",
+                    "PAPER_LEVERAGE": "2",
                     "PAPER_MAX_POSITIONS": "3",
                     "PAPER_START_BALANCE": "100",
                     "PAPER_CLOSE_PROFITABLE_AUTO": "false",
@@ -92,6 +93,7 @@ def test_apply_checkpoint_syncs_paper_db_settings(tmp_path):
 
     assert settings["enabled_tokens"] == "ETHUSDT,BNBUSDT,XRPUSDT"
     assert settings["risk_percent"] == "1.0"
+    assert settings["leverage"] == "2"
     assert settings["max_positions"] == "3"
     assert settings["close_profitable_auto"] == "false"
     assert settings["daily_symbol_loss_limit"] == "2"
@@ -101,3 +103,36 @@ def test_apply_checkpoint_syncs_paper_db_settings(tmp_path):
     assert balance == 100
     assert signal_count == 0
     assert result["paper_db"]["reset_paper_state"] is True
+
+
+def test_apply_checkpoint_clamps_high_leverage_to_runtime_ceiling(tmp_path):
+    env = tmp_path / ".env"
+    env.write_text("ENV=paper\n", encoding="utf-8")
+    db = tmp_path / "paper.db"
+    with sqlite3.connect(db) as conn:
+        conn.execute("create table settings (key text primary key, value text not null, updated_at text)")
+        conn.execute("create table paper_account (id integer primary key, balance real not null)")
+        conn.execute("create table paper_positions (id text)")
+        conn.execute("create table signals (id text)")
+        conn.execute("insert into paper_account (id, balance) values (1, 100)")
+        conn.commit()
+
+    checkpoint = tmp_path / "checkpoint.json"
+    checkpoint.write_text(
+        json.dumps(
+            {
+                "decision": "PAPER_ONLY_SMALL_SAMPLE",
+                "paper_env_suggestion": {
+                    "PAPER_LEVERAGE": "20",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    apply_checkpoint(checkpoint, env, paper_db_path=db)
+
+    with sqlite3.connect(db) as conn:
+        settings = dict(conn.execute("select key, value from settings").fetchall())
+
+    assert settings["leverage"] == "2"

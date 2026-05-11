@@ -33,7 +33,7 @@ const Settings: React.FC = () => {
     const [settings, setSettings] = useState<TradingSettings>({
         risk_percent: 1.0,           // SOTA: Aligned with --risk 0.01 (1%)
         max_positions: 10,           // SOTA: Aligned with --max-pos 10
-        leverage: 10,                // SOTA: Aligned with --leverage 10
+        leverage: 2,
         auto_execute: false,
         smart_recycling: false,      // SOTA: Default OFF (TTL45 Standard)
         execution_ttl_minutes: 45    // SOTA: Default 45m
@@ -875,11 +875,6 @@ const Settings: React.FC = () => {
                                     >
                                         <option value={1}>1x</option>
                                         <option value={2}>2x</option>
-                                        <option value={3}>3x</option>
-                                        <option value={5}>5x</option>
-                                        <option value={10}>10x</option>
-                                        <option value={20}>20x</option>
-                                        <option value={50}>50x</option>
                                     </select>
                                 </div>
                                 <div>

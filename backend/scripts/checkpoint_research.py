@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -16,9 +17,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = ROOT.parent
 SCRIPT_DIR = Path(__file__).resolve().parent
-if str(SCRIPT_DIR) not in __import__("sys").path:
-    __import__("sys").path.insert(0, str(SCRIPT_DIR))
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
 
+from src.trading_contract import clamp_runtime_leverage
 from research_audit import audit_trades, load_trades
 CHECKPOINT_DIR = ROOT / "research_checkpoints"
 PAPER_RESEARCH_DECISIONS = {
@@ -47,6 +51,7 @@ def _paper_env_suggestion(metadata: dict, audit: dict) -> dict | None:
         "USE_FIXED_SYMBOLS": "true",
         "PAPER_START_BALANCE": "100",
         "PAPER_RISK_PERCENT": "0.01",
+        "PAPER_LEVERAGE": str(clamp_runtime_leverage(args.get("leverage", 2))),
         "PAPER_MAX_POSITIONS": str(args.get("max_pos", 4)),
         "PAPER_CLOSE_PROFITABLE_AUTO": "true" if args.get("close_profitable_auto") else "false",
         "PAPER_DAILY_SYMBOL_LOSS_LIMIT": str(int(args.get("daily_symbol_loss_limit") or 0)),

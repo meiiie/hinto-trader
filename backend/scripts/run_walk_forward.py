@@ -18,9 +18,9 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from run_research_matrix import ROOT, run_matrix
+    from run_research_matrix import PRODUCTION_LEVERAGE, ROOT, run_matrix
 except ModuleNotFoundError:
-    from .run_research_matrix import ROOT, run_matrix
+    from .run_research_matrix import PRODUCTION_LEVERAGE, ROOT, run_matrix
 
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -216,7 +216,7 @@ def main() -> None:
     parser.add_argument("--top", type=int, default=30)
     parser.add_argument("--balance", type=float, default=100.0)
     parser.add_argument("--risk", type=float, default=0.01)
-    parser.add_argument("--leverage", type=float, default=20.0)
+    parser.add_argument("--leverage", type=float, default=float(PRODUCTION_LEVERAGE))
     parser.add_argument("--max-pos", type=int, default=4)
     parser.add_argument("--audit-runs", type=int, default=1000)
     parser.add_argument("--case", action="append", help="Only run named matrix case. Repeatable.")

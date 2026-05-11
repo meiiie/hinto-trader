@@ -24,6 +24,7 @@ from src.trading_contract import (
     PRODUCTION_PORTFOLIO_TARGET_PCT,
     PRODUCTION_PROFITABLE_THRESHOLD_PCT,
     PRODUCTION_RISK_PER_TRADE,
+    clamp_runtime_leverage,
     parse_blocked_windows,
 )
 import logging
@@ -105,7 +106,7 @@ class PaperTradingService:
             self.RISK_PER_TRADE = float(
                 settings.get('risk_percent', PRODUCTION_RISK_PER_TRADE * 100)
             ) / 100
-            self.LEVERAGE = int(settings.get('leverage', PRODUCTION_LEVERAGE))
+            self.LEVERAGE = clamp_runtime_leverage(settings.get('leverage', PRODUCTION_LEVERAGE))
         except Exception:
             self.MAX_POSITIONS = PRODUCTION_MAX_POSITIONS
             self.RISK_PER_TRADE = PRODUCTION_RISK_PER_TRADE
@@ -904,7 +905,7 @@ class PaperTradingService:
         return {
             'risk_percent': float(settings.get('risk_percent', str(PRODUCTION_RISK_PER_TRADE * 100))),
             'max_positions': int(settings.get('max_positions', str(PRODUCTION_MAX_POSITIONS))),
-            'leverage': int(settings.get('leverage', str(PRODUCTION_LEVERAGE))),
+            'leverage': clamp_runtime_leverage(settings.get('leverage', PRODUCTION_LEVERAGE)),
             'auto_execute': as_bool('auto_execute', False),
             'execution_ttl_minutes': int(
                 settings.get('execution_ttl_minutes', str(PRODUCTION_ORDER_TTL_MINUTES))
@@ -962,6 +963,8 @@ class PaperTradingService:
 
         for key, value in settings.items():
             if key in allowed_keys:
+                if key == 'leverage':
+                    value = clamp_runtime_leverage(value)
                 # Convert bool to string for storage
                 if isinstance(value, bool):
                     value = 'true' if value else 'false'

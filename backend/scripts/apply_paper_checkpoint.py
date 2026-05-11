@@ -6,8 +6,15 @@ import argparse
 import json
 import shutil
 import sqlite3
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+from src.trading_contract import clamp_runtime_leverage
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -22,6 +29,7 @@ ALLOWED_KEYS = {
     "USE_FIXED_SYMBOLS",
     "PAPER_START_BALANCE",
     "PAPER_RISK_PERCENT",
+    "PAPER_LEVERAGE",
     "PAPER_MAX_POSITIONS",
     "PAPER_CLOSE_PROFITABLE_AUTO",
     "PAPER_DAILY_SYMBOL_LOSS_LIMIT",
@@ -34,6 +42,7 @@ ALLOWED_KEYS = {
 DB_SETTING_KEYS = {
     "enabled_tokens",
     "risk_percent",
+    "leverage",
     "max_positions",
     "close_profitable_auto",
     "daily_symbol_loss_limit",
@@ -63,6 +72,9 @@ def _setting_updates(suggestion: dict) -> dict:
     risk = suggestion.get("PAPER_RISK_PERCENT")
     if risk is not None:
         updates["risk_percent"] = str(float(risk) * 100)
+    leverage = suggestion.get("PAPER_LEVERAGE")
+    if leverage is not None:
+        updates["leverage"] = str(clamp_runtime_leverage(leverage))
     max_positions = suggestion.get("PAPER_MAX_POSITIONS")
     if max_positions is not None:
         updates["max_positions"] = str(int(max_positions))

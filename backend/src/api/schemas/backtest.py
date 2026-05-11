@@ -14,6 +14,7 @@ from ...trading_contract import (
     PRODUCTION_HARD_CAP_PCT,
     PRODUCTION_LEVERAGE,
     PRODUCTION_MAX_POSITIONS,
+    PRODUCTION_MAX_LEVERAGE,
     PRODUCTION_MAX_SL_PCT,
     PRODUCTION_MTF_EMA_PERIOD,
     PRODUCTION_ORDER_TTL_MINUTES,
@@ -57,7 +58,12 @@ class BacktestRequest(BaseModel):
         ge=1,
         description="Max concurrent positions (Shark Tank mode)",
     )
-    leverage: float = Field(PRODUCTION_LEVERAGE, description="Fixed leverage")
+    leverage: float = Field(
+        PRODUCTION_LEVERAGE,
+        gt=0,
+        le=PRODUCTION_MAX_LEVERAGE,
+        description=f"Fixed leverage, capped at {PRODUCTION_MAX_LEVERAGE}x for runtime parity",
+    )
     max_order_value: float = Field(50000.0, description="Liquidity cap")
     maintenance_margin_rate: float = Field(0.004, description="Maintenance margin rate")
     max_consecutive_losses: int = Field(

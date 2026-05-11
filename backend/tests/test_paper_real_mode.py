@@ -80,7 +80,7 @@ def test_paper_order_size_is_capped_by_risk_percent(tmp_path):
     service.update_settings({
         "risk_percent": 1.0,
         "max_positions": 4,
-        "leverage": 20,
+        "leverage": 2,
     })
 
     signal = TradingSignal(
@@ -101,8 +101,8 @@ def test_paper_order_size_is_capped_by_risk_percent(tmp_path):
     order = pending_orders[0]
     intended_loss_at_stop = abs(order.entry_price - order.stop_loss) * order.quantity
 
-    assert order.notional_value == 100.0
-    assert order.margin == 5.0
+    assert order.notional_value == 50.0
+    assert order.margin == 25.0
     assert intended_loss_at_stop <= 1.0
 
 
@@ -114,7 +114,7 @@ def test_paper_realized_pnl_includes_entry_and_exit_fees(tmp_path):
     service.update_settings({
         "risk_percent": 1.0,
         "max_positions": 4,
-        "leverage": 20,
+        "leverage": 2,
     })
 
     signal = TradingSignal(
@@ -131,14 +131,14 @@ def test_paper_realized_pnl_includes_entry_and_exit_fees(tmp_path):
     service.process_market_data(current_price=100.0, high=100.0, low=100.0, symbol="BTCUSDT")
 
     open_position = repo.get_active_orders()[0]
-    assert open_position.realized_pnl == pytest.approx(-0.02)
-    assert repo.get_account_balance() == pytest.approx(99.98)
+    assert open_position.realized_pnl == pytest.approx(-0.01)
+    assert repo.get_account_balance() == pytest.approx(99.99)
 
     service.process_market_data(current_price=99.0, high=100.0, low=99.0, symbol="BTCUSDT")
 
     closed = repo.get_closed_orders(limit=10)[0]
-    expected_exit_fee = 99.0 * 1.0 * service.TAKER_FEE_PCT
-    expected_realized = -0.02 - 1.0 - expected_exit_fee
+    expected_exit_fee = 99.0 * 0.5 * service.TAKER_FEE_PCT
+    expected_realized = -0.01 - 0.5 - expected_exit_fee
 
     assert closed.realized_pnl == pytest.approx(expected_realized)
     assert repo.get_account_balance() == pytest.approx(100.0 + expected_realized)
@@ -152,7 +152,7 @@ def test_paper_partial_tp_tracks_fee_margin_and_realized_pnl(tmp_path):
     service.update_settings({
         "risk_percent": 1.0,
         "max_positions": 4,
-        "leverage": 20,
+        "leverage": 2,
     })
 
     signal = TradingSignal(
@@ -170,11 +170,11 @@ def test_paper_partial_tp_tracks_fee_margin_and_realized_pnl(tmp_path):
     service.process_market_data(current_price=102.0, high=102.0, low=100.1, symbol="BTCUSDT")
 
     open_position = repo.get_active_orders()[0]
-    partial_exit_fee = 102.0 * 0.6 * service.TAKER_FEE_PCT
-    expected_partial_pnl = ((102.0 - 100.0) * 0.6) - partial_exit_fee
-    expected_realized = -0.02 + expected_partial_pnl
+    partial_exit_fee = 102.0 * 0.3 * service.TAKER_FEE_PCT
+    expected_partial_pnl = ((102.0 - 100.0) * 0.3) - partial_exit_fee
+    expected_realized = -0.01 + expected_partial_pnl
 
-    assert open_position.quantity == pytest.approx(0.4)
-    assert open_position.margin == pytest.approx(2.0)
+    assert open_position.quantity == pytest.approx(0.2)
+    assert open_position.margin == pytest.approx(10.0)
     assert open_position.realized_pnl == pytest.approx(expected_realized)
     assert repo.get_account_balance() == pytest.approx(100.0 + expected_realized)

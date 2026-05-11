@@ -16,6 +16,10 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 try:
     from research_audit import audit_trades, load_trades
     from research_scoreboard import build_scoreboard, render_scoreboard_markdown
@@ -23,8 +27,8 @@ except ModuleNotFoundError:
     from .research_audit import audit_trades, load_trades
     from .research_scoreboard import build_scoreboard, render_scoreboard_markdown
 
+from src.trading_contract import PRODUCTION_LEVERAGE
 
-ROOT = Path(__file__).resolve().parents[1]
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -339,7 +343,7 @@ def main() -> None:
     parser.add_argument("--top", type=int, default=30, help="Dynamic top-N universe when --symbols is not provided.")
     parser.add_argument("--balance", type=float, default=100.0)
     parser.add_argument("--risk", type=float, default=0.01)
-    parser.add_argument("--leverage", type=float, default=20.0)
+    parser.add_argument("--leverage", type=float, default=float(PRODUCTION_LEVERAGE))
     parser.add_argument("--max-pos", type=int, default=4)
     parser.add_argument("--audit-runs", type=int, default=1000)
     parser.add_argument("--case", action="append", help="Only run named case. Repeatable.")

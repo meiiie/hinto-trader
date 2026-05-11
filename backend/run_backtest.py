@@ -3,8 +3,8 @@ Hinto Stock Backtest Runner (Portfolio Edition)
 
 CLI tool to run backtests on multiple pairs with SHARED CAPITAL.
 Usage:
-  python run_backtest.py --symbols "BTCUSDT,BNBUSDT" --days 30 --balance 10000 --leverage 10
-  python run_backtest.py --top 10 --days 30 --leverage 10 --no-cb
+  python run_backtest.py --symbols "BTCUSDT,BNBUSDT" --days 30 --balance 10000 --leverage 2
+  python run_backtest.py --top 10 --days 30 --leverage 2 --no-cb
 """
 
 import asyncio
@@ -101,6 +101,7 @@ from src.trading_contract import (
     PRODUCTION_BLOCKED_WINDOWS_STR,
     PRODUCTION_CLOSE_PROFITABLE_AUTO,
     PRODUCTION_HARD_CAP_PCT,
+    PRODUCTION_LEVERAGE,
     PRODUCTION_MAX_SL_PCT,
     PRODUCTION_ORDER_TTL_MINUTES,
     PRODUCTION_PORTFOLIO_TARGET_PCT,
@@ -541,7 +542,12 @@ async def main():
     parser.add_argument("--end", type=str, help="End date YYYY-MM-DD")
     parser.add_argument("--balance", type=float, default=10000.0, help="Initial Shared Balance")
     parser.add_argument("--risk", type=float, default=0.01, help="Risk per trade. Example: 0.01")
-    parser.add_argument("--leverage", type=float, default=0.0, help="Fixed Leverage. Example: 5.0. If 0, use risk-based.")
+    parser.add_argument(
+        "--leverage",
+        type=float,
+        default=PRODUCTION_LEVERAGE,
+        help=f"Fixed leverage. Default: {PRODUCTION_LEVERAGE}x.",
+    )
     parser.add_argument("--cb", action="store_true", help="Enable Circuit Breaker. Default: disabled")
     parser.add_argument("--max-losses", type=int, default=5, help="Max consecutive losses before block. Default: 5")
     parser.add_argument("--cooldown", type=float, default=4, help="Cooldown hours after max losses. Default: 4")
