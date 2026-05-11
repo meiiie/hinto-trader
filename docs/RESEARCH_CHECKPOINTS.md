@@ -18,6 +18,9 @@ The checkpoint is written to `backend/research_checkpoints/` and ignored by Git.
 `backend/run_backtest.py` writes research artifacts under `backend/` regardless
 of the caller's current working directory, so checkpoint creation can resolve
 metadata and trade CSV paths deterministically.
+The experiment metadata still records `git_commit` for traceability, but the
+paper `config_hash` excludes it so unrelated documentation commits do not force
+a new paper checkpoint.
 
 ## Paper Trading Updates
 

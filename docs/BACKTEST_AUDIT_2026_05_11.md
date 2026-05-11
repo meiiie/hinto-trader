@@ -213,7 +213,7 @@ smoke test, not strategy evidence.
 The full covered-window rerun after the parity fix produced the same strategy
 profile:
 
-- checkpoint hash: `33d4f1260aba`
+- checkpoint hash: `81a0c75dbfbe`
 - universe: `ETHUSDT, BNBUSDT, XRPUSDT`
 - return: `+20.61%`
 - trades: `85`
@@ -223,9 +223,12 @@ profile:
 - bootstrap 5th-percentile return: about `-2.2%`
 - decision: `PAPER_ONLY_SMALL_SAMPLE`
 
-This supersedes the earlier local paper hash `c1b97eeaa869`. The strategy
-configuration did not improve; the checkpoint was refreshed because runtime and
-artifact reproducibility were fixed. It remains paper-only.
+This supersedes the earlier local paper hashes `c1b97eeaa869` and
+`33d4f1260aba`. The strategy configuration did not improve; the checkpoint was
+refreshed because runtime and artifact reproducibility were fixed. It remains
+paper-only. The research config hash is now based on strategy inputs and
+excludes the tracing `git_commit`, so documentation commits do not invalidate
+the paper checkpoint.
 
 Current paper-observation checkpoint experiment:
 
@@ -237,7 +240,7 @@ python backend/run_backtest.py \
   --bounce-confirm --daily-symbol-loss-limit 2
 ```
 
-Checkpoint hash: `33d4f1260aba`.
+Checkpoint hash: `81a0c75dbfbe`.
 
 The wider major-universe experiment remains rejected after adding bootstrap
 expectancy checks:
