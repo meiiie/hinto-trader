@@ -560,6 +560,53 @@ not be applied to Paper yet. A local checkpoint was created for the recent
 `paper_env_suggestion: null` because ADX30 is a research-only threshold that is
 not currently represented as a safe Paper runtime setting.
 
+## ADX Threshold Sweep And Selection Haircut
+
+The research matrix was extended with threshold and guard variants:
+
+- `bounce_adx25`: stricter ADX max threshold;
+- `bounce_adx35`: looser ADX max threshold;
+- `bounce_adx30_time_shield` and `bounce_adx35_time_shield`: ADX plus
+  time-window blocking;
+- `bounce_adx30_symbol_side2`: ADX plus repeated symbol-side loss quarantine.
+
+Worst historical 6-month ETH window, `2024-05-11 -> 2024-11-11`, `2x`:
+
+| Case | Return | Trades | PF | Max DD | Boot+ | Decision |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `bounce_daily2` | `-3.29%` | `56` | `0.87` | `8.50%` | `30.7%` | `REJECT` |
+| `bounce_adx30` | `+0.54%` | `28` | `1.05` | `7.31%` | `52.3%` | `PAPER_ONLY_SMALL_SAMPLE` |
+| `bounce_adx35` | `+0.95%` | `43` | `1.05` | `7.66%` | `50.3%` | `PAPER_ONLY_SMALL_SAMPLE` |
+| `bounce_adx25` | `-2.16%` | `14` | `0.70` | `5.26%` | `22.7%` | `REJECT` |
+| `bounce_adx30_time_shield` | `+0.16%` | `11` | `1.03` | `3.73%` | `51.3%` | `PAPER_ONLY_SMALL_SAMPLE` |
+| `bounce_adx35_time_shield` | `-1.39%` | `18` | `0.84` | `4.37%` | `35.7%` | `REJECT` |
+
+The time-shield combinations cut trades too aggressively. ADX25 was too strict.
+ADX35 improved the worst window headline return but weakened the 2-year profile.
+
+Two-year ETH rerun with the new scoreboard haircut,
+`research_scoreboard_20260511_135615_913835.md`:
+
+| Case | Return | Trades | PF | Max DD | Boot+ | Adj Boot+ | Decision |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| `bounce_daily2` | `+10.71%` | `201` | `1.12` | `10.85%` | `78.6%` | `35.8%` | `REJECT` |
+| `bounce_adx30` | `+11.68%` | `110` | `1.27` | `7.63%` | `87.6%` | `62.8%` | `REJECT` |
+| `bounce_adx35` | `+11.26%` | `156` | `1.17` | `9.28%` | `85.6%` | `56.8%` | `REJECT` |
+
+Seven rolling 6-month ETH windows:
+
+| Case | Positive windows | Avg return | Worst return | Max DD | Trades | Decision |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `bounce_adx30` | `5/7` | `+1.89%` | `-3.44%` | `7.41%` | `191` | `REJECT` |
+| `bounce_adx35` | `4/7` | `+1.74%` | `-4.32%` | `8.42%` | `271` | `REJECT` |
+| `bounce_daily2` | `3/7` | `+2.15%` | `-3.29%` | `8.91%` | `351` | `REJECT` |
+
+Decision: `bounce_adx30` remains the best research branch, but it is not good
+enough to update Paper. The adjusted bootstrap gate intentionally penalizes
+choosing the best-looking case after testing multiple related variants. This
+keeps the project from promoting a strategy because of data snooping rather
+than durable edge.
+
 ## Next Research Steps
 
 - collect at least 200 paper/backtest-comparable trades before promoting any

@@ -25,6 +25,8 @@ research checks until pre-screening and cache warmup improve.
 2. Use `scripts/run_research_matrix.py` to standardize experiment execution and
    prevent ad hoc result picking. Matrix runs now emit `research_scoreboard_*`
    JSON/Markdown summaries so weak cases are rejected by gates, not by memory.
+   Multi-case scoreboards also include a selection-adjusted bootstrap gate, so
+   adding more variants increases the burden of evidence for the winner.
    Use `--max-pos`, `--top`, `--balance`, `--risk`, and `--leverage` to match
    the intended paper profile instead of editing the script.
    Use `scripts/run_walk_forward.py` when a strategy needs multiple windows;
@@ -57,6 +59,8 @@ Research promotion requires more than PnL:
   promotion discussions;
 - bootstrap positive-expectancy probability above `90%` for a research
   candidate and above `95%` for promotion review;
+- selection-adjusted bootstrap probability above `75%` after a multi-case
+  matrix haircut;
 - walk-forward windows should not depend on one isolated period;
 - Monte Carlo shuffled drawdown must stay survivable;
 - data coverage gaps must fail closed, especially when 1m intrabar monitoring

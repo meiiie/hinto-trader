@@ -74,6 +74,16 @@ def test_research_matrix_contains_guard_variants():
     assert "--regime-filter" in cases["bounce_ema_regime"]
     assert "bounce_adx30" in cases
     assert cases["bounce_adx30"][cases["bounce_adx30"].index("--adx-max-threshold") + 1] == "30"
+    assert "bounce_adx25" in cases
+    assert cases["bounce_adx25"][cases["bounce_adx25"].index("--adx-max-threshold") + 1] == "25"
+    assert "bounce_adx35" in cases
+    assert cases["bounce_adx35"][cases["bounce_adx35"].index("--adx-max-threshold") + 1] == "35"
+    assert "bounce_adx30_time_shield" in cases
+    assert "--blocked-windows" in cases["bounce_adx30_time_shield"]
+    assert "bounce_adx35_time_shield" in cases
+    assert "--blocked-windows" in cases["bounce_adx35_time_shield"]
+    assert "bounce_adx30_symbol_side2" in cases
+    assert "--symbol-side-loss-limit" in cases["bounce_adx30_symbol_side2"]
     assert "bounce_bb_stoch" in cases
     assert "--bb-filter" in cases["bounce_bb_stoch"]
     assert "--stochrsi-filter" in cases["bounce_bb_stoch"]

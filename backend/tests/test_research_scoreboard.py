@@ -9,7 +9,15 @@ from scripts.research_scoreboard import (
 )
 
 
-def _audit(decision="REJECT", *, trades=15, net=-6.5, profit_factor=0.5, expectancy=-0.43):
+def _audit(
+    decision="REJECT",
+    *,
+    trades=15,
+    net=-6.5,
+    profit_factor=0.5,
+    expectancy=-0.43,
+    bootstrap_positive=0.09,
+):
     return {
         "trades": trades,
         "return_pct": net,
@@ -21,7 +29,7 @@ def _audit(decision="REJECT", *, trades=15, net=-6.5, profit_factor=0.5, expecta
         "max_drawdown_pct": abs(net),
         "longest_loss_streak": 5,
         "bootstrap": {
-            "positive_expectancy_prob": 0.09,
+            "positive_expectancy_prob": bootstrap_positive,
             "return_p05_pct": -14.6,
         },
         "worst_symbols": [{"key": "FILUSDT", "trades": 3, "pnl": -3.75, "win_rate": 0.0}],
@@ -73,6 +81,46 @@ def test_build_scoreboard_and_markdown_render_matrix_summary():
     assert "| top50 | FAIL | REJECT |" in markdown
     assert "Worst symbols: FILUSDT" in markdown
     assert "broken_case" in markdown
+
+
+def test_build_scoreboard_applies_selection_adjusted_bootstrap_haircut():
+    scoreboard = build_scoreboard(
+        [
+            {
+                "case": "strong_after_many_tests",
+                "returncode": 0,
+                "summary": {},
+                "audit": _audit(
+                    decision="PAPER_RESEARCH_CANDIDATE_NEEDS_OOS",
+                    trades=220,
+                    net=7.0,
+                    profit_factor=1.35,
+                    expectancy=0.0318,
+                    bootstrap_positive=0.95,
+                ),
+            },
+            {
+                "case": "thin_after_many_tests",
+                "returncode": 0,
+                "summary": {},
+                "audit": _audit(
+                    decision="PAPER_ONLY_SMALL_SAMPLE",
+                    trades=120,
+                    net=4.0,
+                    profit_factor=1.22,
+                    expectancy=0.0333,
+                    bootstrap_positive=0.80,
+                ),
+            },
+        ]
+    )
+
+    strong_case = next(case for case in scoreboard["cases"] if case["case"] == "strong_after_many_tests")
+    assert strong_case["metrics"]["selection_adjusted_bootstrap_positive_prob"] == 0.9
+    assert "selection_adjusted_bootstrap" in {gate["name"] for gate in strong_case["gates"]}
+
+    thin_case = next(case for case in scoreboard["cases"] if case["case"] == "thin_after_many_tests")
+    assert thin_case["status"] == "WARN"
 
 
 def test_no_trades_scoreboard_recommends_more_evidence():

@@ -85,9 +85,17 @@ Paper mode can be adjusted only after reviewing:
 
 - 1m data coverage and fail-closed behavior;
 - bootstrap positive-expectancy probability;
+- selection-adjusted bootstrap probability when multiple related variants were
+  tested in one matrix;
 - Monte Carlo drawdown;
 - stress runs without maker assumptions or with worse fill assumptions;
 - paper/live drift after enough real-time paper trades.
+
+The selection-adjusted bootstrap gate is a conservative data-snooping guard.
+It penalizes the raw bootstrap confidence by the number of completed variants
+in a matrix, so the project does not promote the best-looking case merely
+because many related cases were tried. It is an operational guardrail before
+creating or applying a checkpoint, not a proof of edge.
 
 If the decision is `REJECT`, the correct paper update is no update.
 

@@ -101,6 +101,42 @@ def _drawdown_gate(max_drawdown_pct: float) -> dict[str, Any]:
     return _gate("max_drawdown_pct", "FAIL", round(max_drawdown_pct, 2), "<= 10", "drawdown is too high")
 
 
+def _selection_adjusted_bootstrap_gate(probability: float, case_count: int) -> dict[str, Any]:
+    if probability >= 0.75:
+        return _gate(
+            "selection_adjusted_bootstrap",
+            "PASS",
+            round(probability, 4),
+            ">= 0.75 after matrix haircut",
+            f"accounts for selecting from {case_count} tested cases",
+        )
+    if probability >= 0.50:
+        return _gate(
+            "selection_adjusted_bootstrap",
+            "WARN",
+            round(probability, 4),
+            ">= 0.75 after matrix haircut",
+            f"edge weakens after {case_count} tested cases",
+        )
+    return _gate(
+        "selection_adjusted_bootstrap",
+        "FAIL",
+        round(probability, 4),
+        ">= 0.75 after matrix haircut",
+        f"likely data-snooping after {case_count} tested cases",
+    )
+
+
+def _status_from_gates(gates: list[dict[str, Any]]) -> str:
+    fail_count = sum(1 for gate in gates if gate["status"] == "FAIL")
+    warn_count = sum(1 for gate in gates if gate["status"] == "WARN")
+    if fail_count:
+        return "FAIL"
+    if warn_count:
+        return "WARN"
+    return "PASS"
+
+
 def _recommendation(decision: str, gates: list[dict[str, Any]]) -> str:
     fail_count = sum(1 for gate in gates if gate["status"] == "FAIL")
     if decision == "REJECT":
@@ -151,10 +187,6 @@ def score_case_result(result: dict[str, Any]) -> dict[str, Any]:
         _drawdown_gate(max_drawdown_pct),
     ]
 
-    fail_count = sum(1 for gate in gates if gate["status"] == "FAIL")
-    warn_count = sum(1 for gate in gates if gate["status"] == "WARN")
-    status = "PASS" if fail_count == 0 and warn_count == 0 else "WARN" if fail_count == 0 else "FAIL"
-
     metrics = {
         "return_pct": _as_float(audit.get("return_pct", summary.get("net_return_pct"))),
         "trades": trades,
@@ -172,7 +204,7 @@ def score_case_result(result: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "case": case_name,
-        "status": status,
+        "status": _status_from_gates(gates),
         "decision": decision,
         "config_hash": result.get("config_hash"),
         "metadata_file": result.get("metadata_file"),
@@ -186,12 +218,30 @@ def score_case_result(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def build_scoreboard(results: list[dict[str, Any]]) -> dict[str, Any]:
-    cases = [score_case_result(result) for result in results]
-    decisions = Counter(case["decision"] for case in cases)
-    statuses = Counter(case["status"] for case in cases)
+def _apply_selection_haircut(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    completed_cases = [case for case in cases if case.get("metrics")]
+    case_count = len(completed_cases)
+    if case_count <= 1:
+        return cases
 
-    ranked = sorted(
+    for case in completed_cases:
+        metrics = case["metrics"]
+        bootstrap_positive = _as_float(metrics.get("bootstrap_positive_expectancy_prob"))
+        false_edge_risk = min(1.0, (1.0 - bootstrap_positive) * case_count)
+        adjusted_probability = round(max(0.0, 1.0 - false_edge_risk), 6)
+        metrics["selection_adjusted_bootstrap_positive_prob"] = adjusted_probability
+
+        gates = [gate for gate in case.get("gates", []) if gate["name"] != "selection_adjusted_bootstrap"]
+        gates.append(_selection_adjusted_bootstrap_gate(adjusted_probability, case_count))
+        case["gates"] = gates
+        case["status"] = _status_from_gates(gates)
+        case["recommendation"] = _recommendation(str(case.get("decision") or "UNKNOWN"), gates)
+
+    return cases
+
+
+def _rank_cases(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return sorted(
         cases,
         key=lambda case: (
             case["status"] == "PASS",
@@ -200,6 +250,15 @@ def build_scoreboard(results: list[dict[str, Any]]) -> dict[str, Any]:
         ),
         reverse=True,
     )
+
+
+def build_scoreboard(results: list[dict[str, Any]]) -> dict[str, Any]:
+    cases = [score_case_result(result) for result in results]
+    _apply_selection_haircut(cases)
+    decisions = Counter(case["decision"] for case in cases)
+    statuses = Counter(case["status"] for case in cases)
+
+    ranked = _rank_cases(cases)
     best_case = ranked[0]["case"] if ranked else None
 
     return {
@@ -250,24 +309,20 @@ def render_scoreboard_markdown(scoreboard: dict[str, Any]) -> str:
         "",
         f"Created: `{scoreboard.get('created_at_utc')}`",
         "",
-        "| Case | Status | Decision | Return | Trades | PF | Exp/Trade | Max DD | Boot+ |",
-        "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| Case | Status | Decision | Return | Trades | PF | Exp/Trade | Max DD | Boot+ | Adj Boot+ |",
+        "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for case in scoreboard.get("cases", []):
         metrics = case.get("metrics", {})
+        adjusted_bootstrap = metrics.get("selection_adjusted_bootstrap_positive_prob")
+        adjusted_text = "-" if adjusted_bootstrap is None else f"{_as_float(adjusted_bootstrap) * 100:.2f}%"
         lines.append(
-            "| {case} | {status} | {decision} | {ret:.2f}% | {trades} | {pf:.2f} | "
-            "{exp:.4f} | {dd:.2f}% | {boot:.2f}% |".format(
-                case=case.get("case", ""),
-                status=case.get("status", ""),
-                decision=case.get("decision", ""),
-                ret=_as_float(metrics.get("return_pct")),
-                trades=int(metrics.get("trades", 0) or 0),
-                pf=_as_float(metrics.get("profit_factor")),
-                exp=_as_float(metrics.get("expectancy_per_trade")),
-                dd=_as_float(metrics.get("max_drawdown_pct")),
-                boot=_as_float(metrics.get("bootstrap_positive_expectancy_prob")) * 100,
-            )
+            f"| {case.get('case', '')} | {case.get('status', '')} | {case.get('decision', '')} | "
+            f"{_as_float(metrics.get('return_pct')):.2f}% | {int(metrics.get('trades', 0) or 0)} | "
+            f"{_as_float(metrics.get('profit_factor')):.2f} | "
+            f"{_as_float(metrics.get('expectancy_per_trade')):.4f} | "
+            f"{_as_float(metrics.get('max_drawdown_pct')):.2f}% | "
+            f"{_as_float(metrics.get('bootstrap_positive_expectancy_prob')) * 100:.2f}% | {adjusted_text} |"
         )
 
     for case in scoreboard.get("cases", []):
@@ -314,13 +369,15 @@ def main() -> None:
         summarize_experiment(path, audit_runs=args.audit_runs, seed=args.seed)
         for path in args.experiment
     ]
+    _apply_selection_haircut(cases)
+    ranked = _rank_cases(cases)
     scoreboard = {
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "summary": {
             "case_count": len(cases),
             "status_counts": dict(Counter(case["status"] for case in cases)),
             "decision_counts": dict(Counter(case["decision"] for case in cases)),
-            "best_case_by_status_then_return": cases[0]["case"] if cases else None,
+            "best_case_by_status_then_return": ranked[0]["case"] if ranked else None,
         },
         "cases": cases,
     }

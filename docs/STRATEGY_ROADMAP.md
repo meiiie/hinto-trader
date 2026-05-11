@@ -135,6 +135,20 @@ Summary of the latest checks:
   windows versus `3/7` for `bounce_daily2`, but both remain rejected because
   at least one window is materially negative.
 
+The ADX threshold sweep rejected the nearby alternatives:
+
+- `bounce_adx25` was too strict and lost money in the worst 6-month window;
+- `bounce_adx35` increased the trade count, but weakened PF and walk-forward
+  stability versus ADX30;
+- ADX plus time shields cut sample size too far to trust.
+
+Scoreboards now report a selection-adjusted bootstrap probability. This is a
+conservative multiple-test haircut: if several related variants are tested in
+one matrix, the best-looking variant must still show a robust edge after the
+selection penalty. On the 2-year ETH rerun, `bounce_adx30` had `87.6%` raw
+bootstrap positive expectancy but only `62.8%` after the matrix haircut, so it
+remains below the promotion gate.
+
 Decision: `bounce_adx30` is a research candidate, not a Paper runtime update.
 Do not lower the production ADX threshold until it survives walk-forward gates
 and the runtime has an explicit, reviewed Paper setting for that threshold.
