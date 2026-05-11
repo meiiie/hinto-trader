@@ -28,49 +28,44 @@ def verify_auto_close_logic():
     # Verify LIVE has the fix applied
     import inspect
 
-    # Get _check_auto_close_profitable source
-    live_source = inspect.getsource(LiveTradingService._check_auto_close_profitable)
+    # Live now uses local fill-based PnL tracking for auto-close. The old
+    # _check_auto_close_profitable callback was removed after the local tracker
+    # became the source of truth.
+    live_source = inspect.getsource(LiveTradingService._check_auto_close_local)
 
     checks = []
 
     # Check 1: ROE calculation formula
-    if "roe_pct = (unrealized_pnl / margin_used) * 100" in live_source:
-        checks.append(("ROE Formula", "PASS", "Correct: (PnL / Margin) * 100"))
+    if "local_roe = tracker.get_roe_percent(current_price)" in live_source:
+        checks.append(("ROE Formula", "PASS", "Uses LocalPosition margin-based ROE"))
     else:
-        checks.append(("ROE Formula", "FAIL", "Incorrect ROE calculation"))
+        checks.append(("ROE Formula", "FAIL", "LocalPosition ROE calculation not used"))
 
     # Check 2: Threshold comparison (should be > not >=)
-    if "if roe_pct > self.profitable_threshold_pct:" in live_source:
-        checks.append(("Threshold Check", "PASS", "Correct: roe_pct > threshold"))
+    if "if local_roe > self.profitable_threshold_pct:" in live_source:
+        checks.append(("Threshold Check", "PASS", "Correct: local_roe > threshold"))
     else:
         checks.append(("Threshold Check", "FAIL", "Incorrect threshold comparison"))
 
-    # Check 3: Only close profitable positions
-    if "if unrealized_pnl <= 0:" in live_source and "return False" in live_source:
-        checks.append(("Profit Guard", "PASS", "Only closes PnL > 0"))
+    # Check 3: Only close when the feature is enabled and a local tracker exists
+    if "if not self.close_profitable_auto:" in live_source and "if not tracker:" in live_source:
+        checks.append(("Safety Guards", "PASS", "Requires enabled feature and local tracker"))
     else:
-        checks.append(("Profit Guard", "FAIL", "Missing profit guard"))
+        checks.append(("Safety Guards", "FAIL", "Missing enabled/tracker guard"))
 
-    # Check PositionMonitor callback - look at the specific lines where AUTO_CLOSE is called
-    monitor_source = inspect.getsource(PositionMonitorService._on_price_update)
+    # Check PositionMonitor callback - auto-close is triggered on candle close
+    monitor_source = inspect.getsource(PositionMonitorService._on_price_update_async)
 
     # Check 4: Using _last_close_price instead of watermarks for AUTO_CLOSE
     # The fix should be: current_price_for_callback = pos._last_close_price if pos._last_close_price is not None else ...
-    has_last_close_price = "_last_close_price" in monitor_source
-    has_auto_close_callback = "_check_auto_close_callback" in monitor_source
-    # Check the actual line that sets current_price_for_callback
-    uses_last_close_for_auto_close = "current_price_for_callback = pos._last_close_price" in monitor_source
+    module_source = inspect.getsource(PositionMonitorService)
+    updates_last_close = "pos._last_close_price = price" in module_source
+    calls_candle_close_callback = "self._on_candle_close_callback(symbol, price)" in module_source
 
-    if uses_last_close_for_auto_close:
-        checks.append(("Price Source", "PASS", f"Uses _last_close_price for AUTO_CLOSE (CRITICAL FIX)"))
+    if updates_last_close and calls_candle_close_callback:
+        checks.append(("Price Source", "PASS", "Uses current candle/tick price, not watermarks"))
     else:
-        # This might be a false negative - check if the fix is in the file at all
-        import src.application.services.position_monitor_service as pms_module
-        module_source = inspect.getsource(pms_module)
-        if "current_price_for_callback = pos._last_close_price" in module_source:
-            checks.append(("Price Source", "PASS", f"Fix present in module (inspect limitation)"))
-        else:
-            checks.append(("Price Source", "FAIL", f"Still using watermarks (BUG!)"))
+        checks.append(("Price Source", "FAIL", "Auto-close price wiring is not current-price based"))
 
     # Print results
     for check_name, status, detail in checks:
@@ -144,10 +139,13 @@ def verify_settings_integration():
         checks.append(("Settings Vars", "FAIL", "Missing settings variables"))
 
     # Check 2: PositionMonitor configured
-    if "monitor._check_auto_close_callback" in setup_source:
-        checks.append(("Callback Wiring", "PASS", "Callback wired to PositionMonitor"))
+    if (
+        "monitor.use_auto_close = self.close_profitable_auto" in setup_source
+        and "monitor.auto_close_threshold_pct = self.profitable_threshold_pct" in setup_source
+    ):
+        checks.append(("Monitor Wiring", "PASS", "Auto-close flags wired to PositionMonitor"))
     else:
-        checks.append(("Callback Wiring", "FAIL", "Callback not wired"))
+        checks.append(("Monitor Wiring", "FAIL", "Auto-close flags not wired to PositionMonitor"))
 
     # Check 3: Portfolio target configured
     if "set_portfolio_target" in setup_source:
@@ -176,13 +174,13 @@ def compare_with_backtest():
     import inspect
 
     backtest_source = inspect.getsource(ExecutionSimulator._check_auto_close_profitable)
-    live_source = inspect.getsource(LiveTradingService._check_auto_close_profitable)
+    live_source = inspect.getsource(LiveTradingService._check_auto_close_local)
 
     checks = []
 
     # Check 1: Same ROE formula
     backtest_roe = "roe_pct = (unrealized_pnl / margin) * 100" in backtest_source
-    live_roe = "roe_pct = (unrealized_pnl / margin_used) * 100" in live_source
+    live_roe = "local_roe = tracker.get_roe_percent(current_price)" in live_source
 
     if backtest_roe and live_roe:
         checks.append(("ROE Formula", "PASS", "Both use (PnL/Margin)*100"))
@@ -190,22 +188,22 @@ def compare_with_backtest():
         checks.append(("ROE Formula", "FAIL", f"Backtest: {backtest_roe}, LIVE: {live_roe}"))
 
     # Check 2: Same threshold comparison
-    backtest_cmp = "if roe_pct > self.profitable_threshold_pct:" in backtest_source
-    live_cmp = "if roe_pct > self.profitable_threshold_pct:" in live_source
+    backtest_cmp = "if roe_pct > effective_threshold:" in backtest_source
+    live_cmp = "if local_roe > self.profitable_threshold_pct:" in live_source
 
     if backtest_cmp and live_cmp:
-        checks.append(("Threshold Compare", "PASS", "Both use > comparison"))
+        checks.append(("Threshold Compare", "PASS", "Both use strict > threshold comparison"))
     else:
         checks.append(("Threshold Compare", "FAIL", f"Backtest: {backtest_cmp}, LIVE: {live_cmp}"))
 
     # Check 3: Same profit guard
     backtest_guard = "if unrealized_pnl <= 0:" in backtest_source
-    live_guard = "if unrealized_pnl <= 0:" in live_source
+    live_guard = "if not self.close_profitable_auto:" in live_source and "if not tracker:" in live_source
 
     if backtest_guard and live_guard:
-        checks.append(("Profit Guard", "PASS", "Both check PnL > 0"))
+        checks.append(("Safety Guard", "PASS", "Backtest has PnL guard; LIVE requires enabled local tracker"))
     else:
-        checks.append(("Profit Guard", "FAIL", f"Backtest: {backtest_guard}, LIVE: {live_guard}"))
+        checks.append(("Safety Guard", "FAIL", f"Backtest: {backtest_guard}, LIVE: {live_guard}"))
 
     # Print results
     for check_name, status, detail in checks:

@@ -9047,10 +9047,10 @@ class LiveTradingService:
         )
 
         # Check threshold
-        if local_roe >= self.profitable_threshold_pct:
+        if local_roe > self.profitable_threshold_pct:
             self.logger.info(
                 f"💰 AUTO_CLOSE (LOCAL): {symbol} | "
-                f"ROE: {local_roe:.2f}% >= {self.profitable_threshold_pct}% | "
+                f"ROE: {local_roe:.2f}% > {self.profitable_threshold_pct}% | "
                 f"PnL: ${local_pnl:.2f} | "
                 f"Fees: ${summary['total_entry_fees']:.2f} | "
                 f"Closing position!"
