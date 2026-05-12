@@ -36,6 +36,21 @@ The walk-forward report writes `walk_forward_*.json` and `walk_forward_*.md`.
 Treat a case with any rejected or negative window as not eligible for paper
 runtime changes.
 
+For LLM-assisted research review, create a research-only advisor artifact:
+
+```bash
+python backend/scripts/llm_research_advisor.py \
+  backend/experiment_YYYYMMDD_HHMMSS_xxxxxx.json \
+  --scoreboard-json backend/research_scoreboard_YYYYMMDD.json \
+  --dry-run
+```
+
+The advisor may read allowlisted OpenAI-compatible provider keys such as
+`NVIDIA_API_KEY` from an optional `--env-file`, but it never writes secrets,
+never mutates paper settings, and never places or suggests executable orders.
+Use it only to produce testable hypotheses, risk notes, and the next backtest
+matrix. Its `llm_research_*.json` and `.md` outputs are local ignored artifacts.
+
 ```bash
 python backend/scripts/checkpoint_research.py backend/experiment_YYYYMMDD_HHMMSS_xxxxxx.json
 ```
@@ -140,3 +155,14 @@ The `bounce_adx30` follow-up produced local checkpoint
 6-month paper-universe run. It intentionally has no `paper_env_suggestion`
 because the ADX `30` threshold is not yet represented as a safe Paper runtime
 setting. Treat it as research evidence only; do not apply it to Paper.
+
+The 2026-05-13 2x LLM-assisted review was run through
+`backend/scripts/llm_research_advisor.py` using a NVIDIA OpenAI-compatible
+provider. It recommended paper observation only, mainly because the best 2x
+case still had only `48` trades. Two deterministic follow-ups were tested:
+`max_sl_pct=0.8` produced `NO_TRADES`, while removing `DOTUSDT` and `AAVEUSDT`
+improved the same 3-month 2x window to about `+8.1%`, `43` trades, PF `1.68`,
+and `4.7%` audit drawdown. That symbol-filter case was checkpointed locally as
+`fcb527361c9a`, but it remains `PAPER_ONLY_SMALL_SAMPLE` and has no
+`paper_env_suggestion` because the surrounding research-only flags are not yet
+paper-runtime parity settings.

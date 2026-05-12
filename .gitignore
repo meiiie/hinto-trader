@@ -90,6 +90,8 @@ backend/research_scoreboard_*.md
 backend/walk_forward_*.json
 backend/walk_forward_*.md
 backend/aggressive_*.json
+backend/llm_research_*.json
+backend/llm_research_*.md
 backend/research_checkpoints/*.json
 run_bt.bat
 

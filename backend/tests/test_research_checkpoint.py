@@ -108,4 +108,5 @@ def test_checkpoint_prefers_eligible_symbols_over_requested_symbols():
 
 
 def test_checkpoint_docs_exist():
-    assert Path("docs/RESEARCH_CHECKPOINTS.md").exists()
+    repo_root = Path(__file__).resolve().parents[2]
+    assert (repo_root / "docs" / "RESEARCH_CHECKPOINTS.md").exists()
