@@ -67,6 +67,28 @@ def test_non_rejected_checkpoint_skips_unsupported_research_flags():
     ) is None
 
 
+def test_checkpoint_skips_research_only_runtime_drift_flags():
+    metadata = {
+        "config_hash": "abc123",
+        "experiment_config": {
+            "args": {
+                "strategy_id": "liquidity_sniper_mean_reversion",
+                "max_pos": 4,
+                "leverage": 10,
+                "extra_blacklist_sides": "*:SHORT",
+                "symbol_side_loss_limit": 1,
+                "direction_block": True,
+            },
+            "symbols": ["ETHUSDT", "BNBUSDT"],
+        },
+    }
+
+    assert _paper_env_suggestion(
+        metadata,
+        {"decision": "PAPER_ONLY_SMALL_SAMPLE"},
+    ) is None
+
+
 def test_checkpoint_prefers_eligible_symbols_over_requested_symbols():
     metadata = {
         "config_hash": "abc123",
