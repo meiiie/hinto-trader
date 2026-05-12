@@ -125,12 +125,19 @@ def _json_default(value: Any) -> str:
 
 def _git_commit() -> str:
     try:
-        return subprocess.check_output(
+        commit = subprocess.check_output(
             ["git", "rev-parse", "--short", "HEAD"],
             cwd=current_dir,
             stderr=subprocess.DEVNULL,
             text=True,
         ).strip()
+        status = subprocess.check_output(
+            ["git", "status", "--porcelain"],
+            cwd=current_dir,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+        return f"{commit}-dirty" if status else commit
     except Exception:
         return "unknown"
 
@@ -341,6 +348,7 @@ async def _build_rolling_router_schedule(
     default_top: int,
     router: Any,
     step_hours: int,
+    pre_registered_universe: Optional[List[str]] = None,
 ) -> tuple[Dict[str, Any], List[str], Dict[str, datetime], int, int]:
     """
     Research-only rolling router.
@@ -348,8 +356,8 @@ async def _build_rolling_router_schedule(
     Approximation by design:
     - recompute BTC regime on a fixed schedule
     - refresh breadth and tradable universe on the same schedule
-    - constrain daily ranking to a research candidate universe built from
-      start/mid/end historical rankings so the pass stays computationally viable
+    - constrain daily ranking to a research candidate universe known before
+      the test window runs, avoiding start/mid/end hindsight selection
 
     This is still cheaper than a fully intraday adaptive router, but it removes
     the biggest false-negative source in v0: a stale regime snapshot taken only
@@ -384,18 +392,13 @@ async def _build_rolling_router_schedule(
         history_error = quality_filter._check_history_depth(symbol_upper, as_of=as_of)
         return history_error is None
 
-    seed_limit = max(120, max(default_top, 50) * 3)
-    mid_time = start_time + ((end_time - start_time) / 2)
-    candidate_seed = set(
-        volume_service.get_top_symbols_at_date(date=start_time, limit=seed_limit)
-    )
-    candidate_seed.update(
-        volume_service.get_top_symbols_at_date(date=mid_time, limit=seed_limit)
-    )
-    candidate_seed.update(
-        volume_service.get_top_symbols_at_date(date=end_time, limit=seed_limit)
-    )
-    ranking_seed_universe = sorted(candidate_seed)
+    if pre_registered_universe:
+        ranking_seed_universe = sorted({sym.upper() for sym in pre_registered_universe})
+    else:
+        seed_limit = max(120, max(default_top, 50) * 3)
+        ranking_seed_universe = sorted(
+            set(volume_service.get_top_symbols_at_date(date=start_time, limit=seed_limit))
+        )
 
     start_ranked_raw = volume_service.get_top_symbols_at_date(
         date=start_time,
@@ -1117,6 +1120,7 @@ async def main():
             default_top=args.top or 40,
             router=_build_adaptive_router(args),
             step_hours=args.rolling_adaptive_router_step_hours,
+            pre_registered_universe=symbols,
         )
         rolling_router_exit_profiles = {}
         for preset in {state.preset for state in rolling_router_schedule.values()}:
@@ -1141,6 +1145,7 @@ async def main():
                 default_top=args.top or 40,
                 router=_build_adaptive_router(args),
                 step_hours=args.rolling_router_bear_overlay_step_hours,
+                pre_registered_universe=symbols,
             )
             rolling_router_overlay_schedule = {
                 key: state

@@ -246,6 +246,10 @@ Current implementation status:
 
 - `--strategy-id liquidity_reclaim_trend_runner` is available for research
   backtests.
+- `--strategy-id donchian_breakout_trend_runner` is available for research
+  backtests as a stricter channel-breakout family. It requires higher timeframe
+  alignment, a prior Donchian channel break, volume confirmation, a strong
+  candle body, close near the candle extreme, bounded ATR%, and a capped stop.
 - It rejects stops wider than `1.2%`, enters as a market-style continuation
   signal in the simulator, and sets the first target at `3R`.
 - It tags signals with `research_exit_profile=trend_runner_3r`, disabling early
@@ -264,6 +268,14 @@ python backend/run_backtest.py \
   --max-sl-validation --max-sl-pct 1.2
 ```
 
+Latest result:
+
+- Strict Donchian v0 on the fixed 12-symbol Feb-May 2026 window was rejected:
+  `-12.44%`, PF `0.60`, `125` trades, and only `0.8%` bootstrap
+  positive-expectancy probability. The problem was not only win rate; stop-loss
+  exits overwhelmed the few runner exits. Do not promote this strategy id to
+  paper runtime.
+
 Promotion criteria:
 
 - profit factor above 1.20 even with win rate below 50%;
@@ -276,6 +288,41 @@ Kill criteria:
 - positive results depend on one crash/trend window;
 - winners vanish after realistic exit slippage;
 - entry selectivity becomes so strict that sample size is not meaningful.
+
+### Track C: Regime Router
+
+Purpose: route the same pre-registered universe through conservative research
+presets instead of forcing a single strategy in every market condition.
+
+Current implementation status:
+
+- `--rolling-adaptive-router` now has a concrete
+  `src.application.analysis.adaptive_regime_router` module.
+- The rolling schedule no longer seeds symbols from start/mid/end rankings.
+  Daily ranking is constrained to the universe known before the test starts.
+- Router states can choose `shield`, guarded mean reversion, or guarded
+  short-only branches with symbol-side blocks.
+- Router exit profiles are research metadata only; they must not be consumed as
+  a live contract until explicitly promoted.
+
+Latest result:
+
+- Fixed 12-symbol rolling router v1 on Feb-May 2026 was rejected but informative:
+  `-0.18%`, PF `0.995`, `151` trades, max DD `5.71%`, and bootstrap
+  positive-expectancy probability `49.3%`.
+- A single stop-width sensitivity at `max_sl_pct=1.5` improved the same router
+  to `+0.33%`, PF `1.01`, and bootstrap positive-expectancy probability
+  `52.15%`, but it still failed promotion gates and the selection-adjusted
+  bootstrap was only `4.3%`.
+- The router reduced damage compared with raw breakout research, but it did not
+  create positive expectancy. It remains research-only.
+
+Next deterministic experiments:
+
+- split the same window into strict time-based out-of-sample checks;
+- run per-symbol robustness only as diagnostics, not as a promotion shortcut;
+- stress maker assumptions with taker-fee and worse-fill variants;
+- simplify filters before adding new parameters.
 
 ## Broker Expansion Policy
 

@@ -179,3 +179,32 @@ trades but was rejected, with PF `1.12` and bootstrap confidence around `0.74`.
 Conclusion: do not promote the symbol-filtered variants to paper runtime; the
 current mean-reversion family still needs either more reliable regime selection,
 more trade coverage, or a genuinely different strategy family.
+
+The 2026-05-13 regime-router / positive-skew follow-up kept the 12-symbol
+research universe pre-registered before testing:
+`BTCUSDT, ETHUSDT, BNBUSDT, SOLUSDT, XRPUSDT, DOGEUSDT, ADAUSDT, AVAXUSDT,
+LINKUSDT, LTCUSDT, BCHUSDT, SUIUSDT`.
+
+Two new research branches were tested on `2026-02-11` through `2026-05-11`,
+with 2x leverage, no compounding, 1m monitoring, volume slippage, adversarial
+pathing, and realistic fills:
+
+- `donchian_breakout_trend_runner` strict breakout runner:
+  checkpoint `e3fcc3e5dfdd`, `125` trades, `-12.44%` audit return, PF `0.60`,
+  max DD `15.6%`, bootstrap positive-expectancy probability `0.8%`. Decision:
+  `REJECT`.
+- fixed-universe `rolling-adaptive-router` v1:
+  checkpoint `44dd9291998f`, `151` trades, `-0.18%` audit return, PF `0.995`,
+  max DD `5.71%`, bootstrap positive-expectancy probability `49.3%`. Decision:
+  `REJECT`.
+- fixed-universe `rolling-adaptive-router` v1 with `max_sl_pct=1.5`:
+  checkpoint `1995063367a1`, `151` trades, `+0.33%` audit return, PF `1.01`,
+  max DD `5.68%`, bootstrap positive-expectancy probability `52.15%`, and
+  selection-adjusted bootstrap `4.3%`. Decision: `REJECT`.
+
+The rolling router is a useful architecture improvement because it now uses only
+a pre-registered universe instead of seeding from start/mid/end hindsight
+rankings. It is still not an edge. The NVIDIA-backed LLM research advisor also
+returned `reject`, mainly due to negative expectancy, PF below `1`, thin sample
+size, and stop losses dominating gross PnL. No paper runtime setting should be
+changed from these runs.

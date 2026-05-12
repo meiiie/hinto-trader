@@ -94,3 +94,19 @@ TREND_CONTINUATION_RUNNER = StrategyContract(
         "optimize for R-multiple distribution, not headline win rate",
     ),
 )
+
+
+DONCHIAN_BREAKOUT_RUNNER = StrategyContract(
+    strategy_id="donchian_breakout_trend_runner",
+    family=StrategyFamily.TREND_CONTINUATION,
+    payoff_shape=PayoffShape.POSITIVE_SKEW,
+    min_reward_to_risk=2.0,
+    max_loss_r=1.0,
+    requires_short_selling=True,
+    requires_leverage=False,
+    validation_notes=(
+        "research track: enter confirmed channel breakouts with ATR-based risk",
+        "must be tested on pre-registered universes and multiple regimes",
+        "designed for low win rate / larger winner distributions",
+    ),
+)
