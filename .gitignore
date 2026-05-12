@@ -89,6 +89,7 @@ backend/research_scoreboard_*.json
 backend/research_scoreboard_*.md
 backend/walk_forward_*.json
 backend/walk_forward_*.md
+backend/aggressive_*.json
 backend/research_checkpoints/*.json
 run_bt.bat
 
