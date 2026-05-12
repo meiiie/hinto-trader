@@ -166,3 +166,16 @@ and `4.7%` audit drawdown. That symbol-filter case was checkpointed locally as
 `fcb527361c9a`, but it remains `PAPER_ONLY_SMALL_SAMPLE` and has no
 `paper_env_suggestion` because the surrounding research-only flags are not yet
 paper-runtime parity settings.
+
+A deeper 2026-05-13 follow-up confirmed that the attractive 3-month symbol
+filters are not yet robust. Removing more weak symbols improved the same
+Feb-May 2026 window, with a 6-symbol long-only variant reaching about `+14.6%`
+over 3 months. Walk-forward then exposed the risk: older windows from May 2025
+through February 2026 were flat to negative and often had only 3 quality-filter
+eligible symbols. The 1-year 6-symbol long-only check returned only about
+`+6.4%` with `61` trades, PF `1.36`, and bootstrap positive-expectancy
+probability below the `0.90` gate. The 1-year long/short variant had more
+trades but was rejected, with PF `1.12` and bootstrap confidence around `0.74`.
+Conclusion: do not promote the symbol-filtered variants to paper runtime; the
+current mean-reversion family still needs either more reliable regime selection,
+more trade coverage, or a genuinely different strategy family.
