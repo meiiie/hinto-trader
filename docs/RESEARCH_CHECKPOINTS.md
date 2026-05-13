@@ -424,3 +424,44 @@ move away from guard tuning and toward either:
   before first target; or
 - true volatility/liquidity-aware symbol selection pre-registered before the
   test window.
+
+The next 2026-05-13 stop-first diagnostic added
+`backend/scripts/stop_first_rule_audit.py`. It aggregates partial exits by
+`Trade ID`, then asks a simpler question before any new runtime rule is
+promoted: if we had blocked a category such as symbol, side, entry hour,
+symbol-side, or side-hour, would the remaining trade set have improved in both
+the first and second halves of the sample?
+
+Diagnostic results:
+
+- 1-year breadth-gated OOS baseline `7cc9a108313d`:
+  `100` aggregated trades, about `-6.28%` return, `34%` win rate, `55%`
+  stop rate, PF `0.81`, and about `13.95%` max drawdown. Stable harmful
+  groups included `LTCUSDT`, `AVAXUSDT`, `LONG`, and entry hour `21:00`.
+- 3-month breadth-gated positive run:
+  `23` aggregated trades, about `+3.14%` return, PF `1.67`, and about
+  `1.73%` max drawdown. `AVAXUSDT` was again harmful, but `LTCUSDT` was
+  protective in this shorter sample.
+- 1-year no-breadth baseline:
+  `382` aggregated trades, about `-13.82%` return, PF `0.88`, and about
+  `22.29%` max drawdown. `LONG`, `BCHUSDT:LONG`, `LTCUSDT`, and late UTC
+  entry hours were stable harmful groups, while `ETHUSDT` and `13:00` were
+  protective.
+
+The follow-up OOS symbol-filter tests were intentionally treated as diagnostics
+because the exclusions were discovered after seeing results:
+
+- breadth OOS with only `AVAXUSDT` excluded improved from about `-6.28%` to
+  about `-2.26%`, but still failed with PF `0.93`, max DD `10.73%`, and only
+  about `35.8%` bootstrap positive-expectancy probability;
+- excluding both `AVAXUSDT` and `LTCUSDT` produced a positive ceiling case
+  around `+3.37%`, PF `1.10`, and about `71.2%` raw bootstrap confidence, but
+  the selection-adjusted bootstrap was only about `13.7%` and max DD remained
+  around `11%`.
+
+Checkpoint `checkpoint_20260513_041143_697040_d16737d0c281.json` correctly
+returned `REJECT` and no paper suggestion. Conclusion: `AVAXUSDT` is a real
+research suspect, but hardcoding symbol removals from this sample would be
+overfit. The next acceptable step is a pre-registered symbol-quality rule using
+only information available before each test window, such as liquidity,
+realized volatility, stop-before-target history, and breadth participation.

@@ -595,6 +595,68 @@ turn a negative-expectancy entry into a robust strategy. The next new family
 should explicitly model stop-before-target probability or pre-register
 volatility/liquidity symbol selection before any backtest is run.
 
+### Track J: Stop-First Rule Audit
+
+Purpose: identify whether losses are structurally concentrated before adding
+another strategy family. This is a diagnostic layer, not a production filter:
+it asks whether blocking a simple category would have improved both halves of
+the sample after partial exits are aggregated back to trade level.
+
+Research basis considered:
+
+- crypto intraday studies report time-of-day effects in activity, volatility,
+  liquidity, and returns:
+  https://link.springer.com/article/10.1007/s11156-024-01304-1
+- stop-loss / take-profit systems can be studied as first-barrier problems,
+  which matches Hinto's stop-before-target failure mode:
+  https://www.sciencedirect.com/science/article/pii/S0305054804001194
+- Deflated-Sharpe style selection control is required before promoting any
+  blacklist, hour block, or symbol-selection rule:
+  https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2460551
+
+Current implementation status:
+
+- `backend/scripts/stop_first_rule_audit.py` is available for research logs.
+- It aggregates rows by `Trade ID`, so partial exits do not inflate trade
+  counts.
+- It evaluates `symbol`, `side`, `entry_hour`, `symbol_side`, and `side_hour`
+  blocking diagnostics.
+- It reports remaining return, PF, max drawdown, stop rate, and first-half /
+  second-half stability.
+- Generated `backend/stop_first_rule_audit_*.json` and `.md` artifacts are
+  local ignored outputs.
+
+Latest result:
+
+- 1-year breadth-gated OOS baseline:
+  `100` aggregated trades, `-6.28%`, PF `0.81`, max DD about `13.95%`.
+  Stable harmful groups included `LTCUSDT`, `AVAXUSDT`, `LONG`, and entry hour
+  `21:00`.
+- 3-month breadth-gated positive sample:
+  `23` aggregated trades, `+3.14%`, PF `1.67`, max DD about `1.73%`.
+  `AVAXUSDT` remained harmful, while `LTCUSDT` was protective in the shorter
+  window.
+- Excluding only `AVAXUSDT` in the 1-year breadth OOS run reduced loss to about
+  `-2.26%`, but still failed PF, drawdown, and bootstrap gates.
+- Excluding both `AVAXUSDT` and `LTCUSDT` produced a positive ceiling case
+  around `+3.37%`, but it still failed promotion gates with PF only `1.10`,
+  max DD around `11%`, and selection-adjusted bootstrap around `13.7%`.
+
+Decision: `REJECT` for Paper. The audit found useful suspects, especially
+`AVAXUSDT`, but hardcoding exclusions from the same data would be selection
+bias. The next eligible experiment must pre-register a symbol-quality rule
+before the test, then evaluate it on untouched windows.
+
+Next deterministic experiments:
+
+- export stop-before-target labels for each candidate signal and measure
+  whether liquidity, realized volatility, spread proxy, breadth participation,
+  entry hour, and recent stop rate predict failure;
+- rank symbols using only data before each window, then test the ranking on
+  the next window without changing the rule;
+- keep Paper runtime unchanged until a pre-registered rule passes OOS,
+  fee/slippage stress, and selection-adjusted bootstrap gates.
+
 ## Broker Expansion Policy
 
 Do not wire live automation to a broker unless the broker has an official API
