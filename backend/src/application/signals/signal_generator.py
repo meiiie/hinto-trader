@@ -28,6 +28,7 @@ from .strategies.donchian_breakout import DonchianBreakoutStrategy
 from .strategies.liquidity_sweep_reversal import LiquiditySweepReversalStrategy
 from .strategies.momentum_pullback import MomentumPullbackStrategy
 from .strategies.trend_continuation import TrendContinuationStrategy
+from .strategies.volatility_managed_momentum import VolatilityManagedMomentumStrategy
 from .strategies.volatility_squeeze_breakout import VolatilitySqueezeBreakoutStrategy
 from .strategy_ids import (
     DEFAULT_STRATEGY_ID,
@@ -36,6 +37,7 @@ from .strategy_ids import (
     MOMENTUM_PULLBACK_STRATEGY_ID,
     SUPPORTED_STRATEGY_IDS,
     TREND_RUNNER_STRATEGY_ID,
+    VOLATILITY_MANAGED_MOMENTUM_STRATEGY_ID,
     VOLATILITY_SQUEEZE_STRATEGY_ID,
 )
 from ...strategies.strategy_registry import StrategyRegistry, StrategyConfig
@@ -110,6 +112,7 @@ class SignalGenerator:
         self._momentum_pullback = MomentumPullbackStrategy()
         self._volatility_squeeze = VolatilitySqueezeBreakoutStrategy()
         self._liquidity_sweep_reversal = LiquiditySweepReversalStrategy()
+        self._volatility_managed_momentum = VolatilityManagedMomentumStrategy()
 
         # INSTITUTIONAL (Feb 2026): ADX Regime Filter
         # ADX > 25 = trending → trade normally
@@ -288,6 +291,8 @@ class SignalGenerator:
             return self._volatility_squeeze.generate(ctx, symbol, htf_bias, **kwargs)
         if self.strategy_id == LIQUIDITY_SWEEP_REVERSAL_STRATEGY_ID:
             return self._liquidity_sweep_reversal.generate(ctx, symbol, htf_bias, **kwargs)
+        if self.strategy_id == VOLATILITY_MANAGED_MOMENTUM_STRATEGY_ID:
+            return self._volatility_managed_momentum.generate(ctx, symbol, htf_bias, **kwargs)
 
         # Use Limit Sniper Logic
         config = StrategyRegistry.get_config(symbol)

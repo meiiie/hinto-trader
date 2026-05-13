@@ -158,3 +158,19 @@ LIQUIDITY_SWEEP_REVERSAL = StrategyContract(
         "must be rejected unless fixed-universe tests survive fees, slippage, and bootstrap gates",
     ),
 )
+
+
+VOLATILITY_MANAGED_MOMENTUM = StrategyContract(
+    strategy_id="volatility_managed_momentum",
+    family=StrategyFamily.TREND_CONTINUATION,
+    payoff_shape=PayoffShape.POSITIVE_SKEW,
+    min_reward_to_risk=1.8,
+    max_loss_r=1.0,
+    requires_short_selling=True,
+    requires_leverage=False,
+    validation_notes=(
+        "research track: time-series momentum only when short realized volatility is below baseline",
+        "approximates volatility-managed momentum with a signal gate instead of runtime sizing",
+        "must survive fixed-universe and out-of-sample tests before paper use",
+    ),
+)
