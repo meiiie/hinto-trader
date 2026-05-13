@@ -540,12 +540,17 @@ Latest result:
   probability `89.55%`.
 - Matrix scoreboard:
   `backend/research_scoreboard_breadth_gate_3m_20260513.md`.
+- A 1-year OOS coverage check exposed the main weakness. With `min_symbols=9`,
+  the gate correctly failed closed because only `7` symbols passed the quality
+  filter at the older start date. With `min_symbols=6`, the same logic traded
+  but failed: checkpoint `7cc9a108313d`, `134` trades, `-6.28%` audit return,
+  PF `0.81`, max DD `13.89%`, bootstrap positive-expectancy probability
+  `12.15%`.
 
-Decision: `PAPER_ONLY_SMALL_SAMPLE`, but not promoted. This is the best
-portfolio-level improvement in the current round: it increased expectancy and
-cut drawdown sharply. It still fails sample-size and selection-adjusted
-bootstrap gates (`37.3%` after six tested cases), so it must remain research
-only.
+Decision: `REJECT` for promotion. This is still the best portfolio-level
+improvement in the short Feb-May 2026 round, but the 1-year check shows it is
+not a durable edge yet. Keep the implementation as a research filter and
+diagnostic, not as Paper runtime.
 
 Next deterministic experiments:
 

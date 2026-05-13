@@ -368,7 +368,19 @@ and selection-adjusted bootstrap gates. The best run is promising, not
 promotion-ready: it has only `33` trades and selection-adjusted bootstrap is
 only `37.3%` after six tested cases.
 
-Conclusion: breadth gating is the strongest architecture direction found in
-this round because it improves return, PF, expectancy, and drawdown versus the
-same baseline. It is still research-only. No Paper runtime or `.env` setting
-was changed.
+A follow-up OOS check on `2025-05-11` through `2026-05-11` found the failure
+mode. With the same `min_symbols=9`, only `7` symbols passed quality filtering,
+so the gate failed closed and generated no trades. The engine now records a
+coverage warning when `breadth_min_symbols` exceeds the eligible universe.
+
+Lowering only `breadth_min_symbols` to `6` allowed the 1-year test to trade,
+but the edge did not hold:
+
+- checkpoint `checkpoint_20260513_033344_320069_7cc9a108313d.json`,
+  `134` trades, `-6.28%` audit return, PF `0.8119`, max DD `13.89%`,
+  bootstrap positive-expectancy probability `12.15%`. Decision: `REJECT`.
+
+Conclusion: breadth gating is a useful architecture direction because it
+improves the recent 3-month baseline and exposes a better risk-on/risk-off
+control surface. It is not yet a durable trading edge. No Paper runtime or
+`.env` setting was changed.
