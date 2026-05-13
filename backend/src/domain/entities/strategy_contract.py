@@ -126,3 +126,19 @@ MOMENTUM_PULLBACK_RUNNER = StrategyContract(
         "must survive fixed-universe and out-of-sample tests before paper use",
     ),
 )
+
+
+VOLATILITY_SQUEEZE_RUNNER = StrategyContract(
+    strategy_id="volatility_squeeze_breakout",
+    family=StrategyFamily.TREND_CONTINUATION,
+    payoff_shape=PayoffShape.POSITIVE_SKEW,
+    min_reward_to_risk=2.0,
+    max_loss_r=1.0,
+    requires_short_selling=True,
+    requires_leverage=False,
+    validation_notes=(
+        "research track: volatility compression followed by trend-aligned expansion",
+        "do not promote unless fixed-universe multi-window tests survive",
+        "designed to reduce whipsaws by requiring squeeze, expansion, trend, and volume",
+    ),
+)

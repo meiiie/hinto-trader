@@ -27,12 +27,14 @@ from ..services.stop_loss_calculator import StopLossCalculator
 from .strategies.donchian_breakout import DonchianBreakoutStrategy
 from .strategies.momentum_pullback import MomentumPullbackStrategy
 from .strategies.trend_continuation import TrendContinuationStrategy
+from .strategies.volatility_squeeze_breakout import VolatilitySqueezeBreakoutStrategy
 from .strategy_ids import (
     DEFAULT_STRATEGY_ID,
     DONCHIAN_BREAKOUT_STRATEGY_ID,
     MOMENTUM_PULLBACK_STRATEGY_ID,
     SUPPORTED_STRATEGY_IDS,
     TREND_RUNNER_STRATEGY_ID,
+    VOLATILITY_SQUEEZE_STRATEGY_ID,
 )
 from ...strategies.strategy_registry import StrategyRegistry, StrategyConfig
 
@@ -104,6 +106,7 @@ class SignalGenerator:
         self._trend_runner = TrendContinuationStrategy()
         self._donchian_breakout = DonchianBreakoutStrategy()
         self._momentum_pullback = MomentumPullbackStrategy()
+        self._volatility_squeeze = VolatilitySqueezeBreakoutStrategy()
 
         # INSTITUTIONAL (Feb 2026): ADX Regime Filter
         # ADX > 25 = trending → trade normally
@@ -278,6 +281,8 @@ class SignalGenerator:
             return self._donchian_breakout.generate(ctx, symbol, htf_bias, **kwargs)
         if self.strategy_id == MOMENTUM_PULLBACK_STRATEGY_ID:
             return self._momentum_pullback.generate(ctx, symbol, htf_bias, **kwargs)
+        if self.strategy_id == VOLATILITY_SQUEEZE_STRATEGY_ID:
+            return self._volatility_squeeze.generate(ctx, symbol, htf_bias, **kwargs)
 
         # Use Limit Sniper Logic
         config = StrategyRegistry.get_config(symbol)
