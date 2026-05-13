@@ -297,3 +297,34 @@ was too small after fees/slippage, and the average loss was larger than the
 average win. Do not update Paper runtime from `liquidity_sweep_reversal`.
 The next research step should move away from single-entry-pattern families and
 treat regime routing / breadth selection as first-class hypotheses.
+
+The 2026-05-13 volatility-managed momentum follow-up implemented
+`volatility_managed_momentum`. The hypothesis was to keep time-series momentum
+but only when short realized volatility is below the symbol's own longer
+baseline, approximating volatility-managed portfolio research in the signal
+layer.
+
+External research consulted for this round:
+
+- Han/Kang/Ryu on crypto time-series momentum under realistic costs and
+  liquidation-aware assumptions: https://ssrn.com/abstract=4675565
+- Moreira/Muir on volatility-managed portfolios:
+  https://www.nber.org/papers/w22208
+- Adaptive crypto trend-following / portfolio construction:
+  https://arxiv.org/abs/2602.11708
+
+Results:
+
+- Fixed 12-symbol Feb-May 2026 long/short:
+  `83` trades, `-5.39%` audit return, win rate `43.37%`, max DD `10.87%`.
+  Several symbols were positive (`LTCUSDT`, `AVAXUSDT`, `XRPUSDT`, `ETHUSDT`),
+  but losses in `BNBUSDT`, `LINKUSDT`, `BCHUSDT`, and `SUIUSDT` dominated.
+- Long-only diagnostic improved the damage but still failed:
+  checkpoint `2e06f458e1c8`, `46` trades, `-1.80%` audit return, PF `0.83`,
+  max DD `5.14%`, bootstrap positive-expectancy probability `26.8%`.
+  Decision: `REJECT`.
+
+Conclusion: volatility-gating helps compared with raw long/short momentum, but
+does not create a robust edge as a standalone entry family. Do not update Paper
+runtime. The next step should be a portfolio-level breadth/risk-on gate and
+true volatility-targeted sizing parity, not another per-symbol entry variant.

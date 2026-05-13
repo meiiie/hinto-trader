@@ -449,6 +449,55 @@ Next deterministic experiments:
 - add a formal multiple-test/Deflated-Sharpe trace before any future family can
   be called a candidate.
 
+### Track G: Volatility-Managed Momentum
+
+Purpose: test whether momentum should be traded only when the symbol's short
+realized volatility is below its own longer baseline. This approximates the
+volatility-managed portfolio idea in the signal layer, because Hinto's current
+runtime does not yet support true volatility-targeted position sizing.
+
+Research basis considered:
+
+- Han/Kang/Ryu find that crypto time-series momentum can survive more realistic
+  assumptions better than cross-sectional momentum, but many attractive results
+  disappear after costs, intraday path, and liquidation risk:
+  https://ssrn.com/abstract=4675565
+- Moreira/Muir show the general idea of reducing exposure when volatility is
+  high can improve risk-adjusted performance in several factor portfolios:
+  https://www.nber.org/papers/w22208
+- Newer crypto trend-following work emphasizes adaptive portfolio construction
+  and regime-conditional testing, which matches Hinto's current failure mode:
+  https://arxiv.org/abs/2602.11708
+
+Current implementation status:
+
+- `--strategy-id volatility_managed_momentum` is available for research
+  backtests.
+- It requires EMA trend alignment, time-series momentum, EMA pullback reclaim,
+  anchored-VWAP agreement, volume confirmation, and short realized volatility
+  below a longer baseline.
+- It is a signal-gate approximation, not true volatility-targeted sizing.
+
+Latest result:
+
+- Fixed 12-symbol Feb-May 2026 long/short:
+  `83` trades, `-5.39%` audit return, win rate `43.37%`, max DD `10.87%`.
+- Long-only diagnostic:
+  checkpoint `2e06f458e1c8`, `46` trades, `-1.80%` audit return, PF `0.83`,
+  max DD `5.14%`, bootstrap positive-expectancy probability `26.8%`.
+
+Decision: `REJECT`. Long-only improved the damage materially, but still failed
+expectancy, PF, bootstrap, and sample-size gates. Do not promote
+`volatility_managed_momentum` to Paper.
+
+Next deterministic experiments:
+
+- implement a portfolio-level breadth/risk-on gate before more standalone
+  strategy families;
+- test volatility management as actual sizing only after backtest and Paper
+  execution can apply the same sizing contract;
+- keep long-only momentum as a diagnostic branch, not a runtime setting.
+
 ## Broker Expansion Policy
 
 Do not wire live automation to a broker unless the broker has an official API
