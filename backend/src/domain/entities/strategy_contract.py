@@ -142,3 +142,19 @@ VOLATILITY_SQUEEZE_RUNNER = StrategyContract(
         "designed to reduce whipsaws by requiring squeeze, expansion, trend, and volume",
     ),
 )
+
+
+LIQUIDITY_SWEEP_REVERSAL = StrategyContract(
+    strategy_id="liquidity_sweep_reversal",
+    family=StrategyFamily.MEAN_REVERSION_SCALP,
+    payoff_shape=PayoffShape.POSITIVE_SKEW,
+    min_reward_to_risk=1.4,
+    max_loss_r=1.0,
+    requires_short_selling=True,
+    requires_leverage=False,
+    validation_notes=(
+        "research track: fade failed stop-run candles after swing sweep and reclaim",
+        "avoid raw breakout chasing; require wick rejection, VWAP distance, and capped risk",
+        "must be rejected unless fixed-universe tests survive fees, slippage, and bootstrap gates",
+    ),
+)
