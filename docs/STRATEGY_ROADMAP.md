@@ -397,6 +397,58 @@ Next deterministic experiments:
 - add Deflated-Sharpe or equivalent multiple-testing reporting before any
   future parameter matrix is eligible for promotion.
 
+### Track F: Liquidity Sweep Reversal
+
+Purpose: test whether failed stop-run candles are safer to fade than to chase.
+The setup requires price to sweep a recent swing high/low, close back inside
+the prior range, show a clear wick rejection, stay near anchored VWAP, and keep
+ATR-based risk capped.
+
+Research basis considered:
+
+- Han, Kang, and Ryu's cryptocurrency momentum study warns that realistic
+  costs, daily price path, and liquidation risk can erase attractive crypto
+  momentum results; it also finds stronger time-series than cross-sectional
+  evidence, with losers prone to rebound:
+  https://ssrn.com/abstract=4675565
+- Osler's stop-loss order research supports the idea that clustered stop
+  orders can accelerate moves, while take-profit order clusters can reverse,
+  but it also cautions that the statistical tests do not prove causality:
+  https://www.sciencedirect.com/science/article/abs/pii/S0261560604001147
+- Bailey and Lopez de Prado's Deflated Sharpe work remains the gatekeeping
+  reference for selection bias and multiple-test overfitting:
+  https://www.davidhbailey.com/dhbpapers/deflated-sharpe.pdf
+
+Current implementation status:
+
+- `--strategy-id liquidity_sweep_reversal` is available for research
+  backtests.
+- It rejects weak sweeps by requiring wick ratio, close-location reclaim,
+  volume, VWAP distance, low long-horizon momentum, and max stop distance.
+- It is intentionally not wired to Paper runtime.
+
+Latest result:
+
+- First fixed-universe Feb-May 2026 run:
+  `42` trades, `-7.69%` audit return, win rate `38.10%`, max DD `7.69%`.
+- A stricter default reduced the damage but still failed:
+  checkpoint `93e1bf99979b`, `30` trades, `-6.32%` audit return, PF `0.29`,
+  max DD `6.32%`, bootstrap positive-expectancy probability `0.05%`.
+
+Decision: `REJECT`. The family contained pockets of symbol-specific wins
+(`BCHUSDT`, `SUIUSDT`) but failed the pre-registered universe and had no true
+positive-skew behavior at 2x: zero trades reached `7%` ROE. Do not promote
+`liquidity_sweep_reversal` to Paper.
+
+Next deterministic experiments:
+
+- stop adding candle-pattern-only strategies until portfolio-level regime and
+  symbol selection are tested as first-class, pre-registered hypotheses;
+- compare the current Paper mean-reversion candidate against an observe-only
+  breadth router, not another standalone entry rule;
+- add a formal multiple-test/Deflated-Sharpe trace before any future family can
+  be called a candidate.
+
 ## Broker Expansion Policy
 
 Do not wire live automation to a broker unless the broker has an official API

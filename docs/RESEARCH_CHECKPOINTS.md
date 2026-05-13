@@ -264,3 +264,36 @@ Conclusion: volatility compression is not yet a profitable standalone entry in
 this 15m Binance Futures setup. The MFE profile was too small for positive
 skew at 2x, with zero trades reaching `7%` ROE in the best filtered run. Keep
 the code as a research family/regime label, but do not update Paper runtime.
+
+The 2026-05-13 liquidity-sweep follow-up implemented another standalone
+research family, `liquidity_sweep_reversal`. The hypothesis was to fade failed
+stop-run candles only after a swing sweep, reclaim close, wick rejection,
+anchored-VWAP proximity, and capped ATR risk.
+
+External research consulted for this round:
+
+- Han/Kang/Ryu on cryptocurrency time-series and cross-sectional momentum under
+  realistic assumptions: https://ssrn.com/abstract=4675565
+- Osler on stop-loss order clusters and price cascades in currency markets:
+  https://www.sciencedirect.com/science/article/abs/pii/S0261560604001147
+- Bailey/Lopez de Prado on Deflated Sharpe and backtest selection bias:
+  https://www.davidhbailey.com/dhbpapers/deflated-sharpe.pdf
+
+Results:
+
+- Initial sweep-reversal defaults:
+  `42` trades, `-7.69%` audit return, win rate `38.10%`, max DD `7.69%`.
+  `BCHUSDT` and `XRPUSDT` were positive, but `ETHUSDT`, `BNBUSDT`, `LTCUSDT`,
+  `AVAXUSDT`, and `SOLUSDT` dominated losses. Both long and short sides were
+  negative.
+- Tightening wick ratio, close-location reclaim, volume, and long-horizon
+  momentum filters reduced trade count but did not create edge:
+  checkpoint `93e1bf99979b`, `30` trades, `-6.32%` audit return, PF `0.29`,
+  max DD `6.32%`, bootstrap positive-expectancy probability `0.05%`.
+  Decision: `REJECT`.
+
+Conclusion: standalone candle-pattern sweeps are not enough. The MFE profile
+was too small after fees/slippage, and the average loss was larger than the
+average win. Do not update Paper runtime from `liquidity_sweep_reversal`.
+The next research step should move away from single-entry-pattern families and
+treat regime routing / breadth selection as first-class hypotheses.
