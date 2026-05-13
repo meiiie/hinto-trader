@@ -384,3 +384,43 @@ Conclusion: breadth gating is a useful architecture direction because it
 improves the recent 3-month baseline and exposes a better risk-on/risk-off
 control surface. It is not yet a durable trading edge. No Paper runtime or
 `.env` setting was changed.
+
+The next 2026-05-13 risk-guard follow-up tested whether the OOS failure was
+mainly a sizing/quarantine problem rather than an entry-edge problem. The same
+fixed 12-symbol universe and 1-year window were used. External context checked
+for this round:
+
+- crypto intraday patterns and liquidity/volatility seasonality:
+  https://link.springer.com/article/10.1007/s11156-024-01304-1
+- stop-loss-aware ML/risk labels:
+  https://www.sciencedirect.com/science/article/pii/S1544612323006578
+- Deflated Sharpe / selection-bias control:
+  https://www.davidhbailey.com/dhbpapers/deflated-sharpe.pdf
+
+Results:
+
+- No breadth gate baseline:
+  `516` trades, `-13.82%` audit return, PF `0.885`, max DD `22.29%`,
+  bootstrap positive-expectancy probability `11.0%`. Decision: `REJECT`.
+- Breadth gate `min_symbols=6` remained the least bad:
+  checkpoint `7cc9a108313d`, `134` trades, `-6.28%`, PF `0.812`,
+  max DD `13.89%`, bootstrap positive-expectancy probability `12.15%`.
+- Aggressive daily/symbol-side kill after one loss:
+  `119` trades, `-6.38%`, PF `0.787`, max DD `14.03%`.
+- Daily loss size penalty `50%`:
+  `134` trades, `-6.72%`, PF `0.797`, max DD `14.32%`.
+- Max same direction `1`:
+  `88` trades, `-9.32%`, PF `0.629`, max DD `12.75%`.
+
+Scoreboard:
+`backend/research_scoreboard_risk_guard_oos_1y_20260513.md`.
+
+Conclusion: risk guards reduce trade count and sometimes reduce raw damage,
+but they do not fix negative expectancy. The current mean-reversion entry still
+loses too much to stop-loss exits over a full year. The next research should
+move away from guard tuning and toward either:
+
+- a different entry label that predicts whether stop-loss is likely to be hit
+  before first target; or
+- true volatility/liquidity-aware symbol selection pre-registered before the
+  test window.

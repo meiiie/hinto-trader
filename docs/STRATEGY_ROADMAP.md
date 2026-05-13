@@ -561,6 +561,40 @@ Next deterministic experiments:
 - investigate whether `AVAXUSDT` and low-count loser symbols are structural
   exclusions or merely sample noise, using pre-registered walk-forward splits.
 
+### Track I: OOS Risk-Guard Matrix
+
+Purpose: determine whether the 1-year failure can be fixed by more conservative
+risk guards before adding another entry algorithm.
+
+Research basis considered:
+
+- Crypto intraday studies show persistent time-of-day patterns in trading
+  activity, volatility, liquidity, and returns:
+  https://link.springer.com/article/10.1007/s11156-024-01304-1
+- Stop-loss-aware labeling research supports measuring whether a trade is
+  likely to hit stop-loss before target, rather than optimizing only direction:
+  https://www.sciencedirect.com/science/article/pii/S1544612323006578
+- Deflated-Sharpe / multiple-testing discipline remains the promotion gate:
+  https://www.davidhbailey.com/dhbpapers/deflated-sharpe.pdf
+
+Latest result:
+
+- No breadth gate 1-year baseline:
+  `516` trades, `-13.82%` audit return, PF `0.885`, max DD `22.29%`.
+- Breadth gate `min_symbols=6`:
+  `134` trades, `-6.28%`, PF `0.812`, max DD `13.89%`.
+- Aggressive one-loss quarantine:
+  `119` trades, `-6.38%`, PF `0.787`, max DD `14.03%`.
+- Daily loss size penalty `50%`:
+  `134` trades, `-6.72%`, PF `0.797`, max DD `14.32%`.
+- Max same direction `1`:
+  `88` trades, `-9.32%`, PF `0.629`, max DD `12.75%`.
+
+Decision: `REJECT`. Risk guards are useful for damage control, but they cannot
+turn a negative-expectancy entry into a robust strategy. The next new family
+should explicitly model stop-before-target probability or pre-register
+volatility/liquidity symbol selection before any backtest is run.
+
 ## Broker Expansion Policy
 
 Do not wire live automation to a broker unless the broker has an official API
