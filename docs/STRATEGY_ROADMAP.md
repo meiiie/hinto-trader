@@ -617,6 +617,8 @@ Research basis considered:
 Current implementation status:
 
 - `backend/scripts/stop_first_rule_audit.py` is available for research logs.
+- `backend/scripts/run_symbol_quality_walk_forward.py` is available for
+  pre-registered train/test symbol selection checks.
 - It aggregates rows by `Trade ID`, so partial exits do not inflate trade
   counts.
 - It evaluates `symbol`, `side`, `entry_hour`, `symbol_side`, and `side_hour`
@@ -646,6 +648,27 @@ Decision: `REJECT` for Paper. The audit found useful suspects, especially
 `AVAXUSDT`, but hardcoding exclusions from the same data would be selection
 bias. The next eligible experiment must pre-register a symbol-quality rule
 before the test, then evaluate it on untouched windows.
+
+The first pre-registered symbol-quality walk-forward was also rejected. It used
+each prior 3-month window to score symbols by training-window PnL, excess
+stop-rate, and uncertainty penalty, then tested the selected 6-symbol set on
+the next 3-month window:
+
+- `2025-05-11` to `2025-08-11` trained selection, `2025-08-11` to
+  `2025-11-11` test: selected set produced `NO_TRADES` after quality filtering;
+  baseline was about `-8.01%`.
+- `2025-08-11` to `2025-11-11` trained selection, `2025-11-11` to
+  `2026-02-11` test: selected set again produced `NO_TRADES`; baseline was
+  about `+1.08%`.
+- `2025-11-11` to `2026-02-11` trained selection, `2026-02-11` to
+  `2026-05-11` test: selected set returned about `+0.62%`, PF `1.09`, and
+  bootstrap positive-expectancy probability about `58%`; baseline was about
+  `+3.14%`, PF `1.67`.
+
+This is not an edge. It is a useful negative result: outcome-only symbol
+selection either avoids trading or underperforms the baseline. Future symbol
+selection must start with coverage and liquidity eligibility, then add
+stop-before-target features. Do not use this walk-forward to alter Paper.
 
 Next deterministic experiments:
 

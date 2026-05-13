@@ -465,3 +465,29 @@ research suspect, but hardcoding symbol removals from this sample would be
 overfit. The next acceptable step is a pre-registered symbol-quality rule using
 only information available before each test window, such as liquidity,
 realized volatility, stop-before-target history, and breadth participation.
+
+The next symbol-quality walk-forward converted that idea into
+`backend/scripts/run_symbol_quality_walk_forward.py`. For each train/test pair,
+the script trains on the earlier 3-month window, scores symbols by net PnL
+minus excess stop-rate and uncertainty penalties, then tests the selected
+symbols on the next 3-month window while also running the full 12-symbol
+baseline for comparison.
+
+Three train/test pairs were run:
+
+- train `2025-05-11` to `2025-08-11`, test `2025-08-11` to `2025-11-11`:
+  the selected set avoided the worst baseline loss, but generated no trades
+  after quality filtering. Baseline was about `-8.01%`.
+- train `2025-08-11` to `2025-11-11`, test `2025-11-11` to `2026-02-11`:
+  selected symbols again generated no trades, while the baseline was about
+  `+1.08%`.
+- train `2025-11-11` to `2026-02-11`, test `2026-02-11` to `2026-05-11`:
+  selected symbols returned about `+0.62%`, PF `1.09`, `33` trades, and only
+  about `58%` bootstrap positive-expectancy probability. The baseline returned
+  about `+3.14%`, PF `1.67`.
+
+Conclusion: simple trade-outcome symbol ranking is not enough. It can avoid a
+bad window by not trading, but it also misses profitable windows and does not
+produce robust expectancy. Paper runtime remains unchanged. The next research
+step should rank symbols by coverage/liquidity and stop-before-target features
+available before the window, not by recent backtest PnL alone.

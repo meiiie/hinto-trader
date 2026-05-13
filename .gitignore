@@ -87,6 +87,8 @@ backend/experiment_*.json
 backend/research_matrix_*.json
 backend/research_scoreboard_*.json
 backend/research_scoreboard_*.md
+backend/symbol_quality_walk_forward_*.json
+backend/symbol_quality_walk_forward_*.md
 backend/stop_first_rule_audit_*.json
 backend/stop_first_rule_audit_*.md
 backend/walk_forward_*.json
