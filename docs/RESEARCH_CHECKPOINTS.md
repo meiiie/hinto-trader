@@ -208,3 +208,32 @@ rankings. It is still not an edge. The NVIDIA-backed LLM research advisor also
 returned `reject`, mainly due to negative expectancy, PF below `1`, thin sample
 size, and stop losses dominating gross PnL. No paper runtime setting should be
 changed from these runs.
+
+The 2026-05-13 momentum-pullback follow-up tested a new strategy family,
+`adaptive_momentum_pullback`, on the same pre-registered 12-symbol research
+universe. The hypothesis was to avoid raw breakout chasing: require
+multi-horizon momentum first, then enter only after a pullback reclaims a short
+EMA with capped ATR/swing risk.
+
+Results:
+
+- Feb-May 2026, long/short:
+  checkpoint `85b67a08d316`, `107` trades, `+3.16%` audit return, PF `1.13`,
+  max DD `7.72%`, bootstrap positive-expectancy probability `70.15%`.
+  Decision: `REJECT` because sample size was thin and bootstrap confidence was
+  below the `90%` gate.
+- May 2025-May 2026, long/short:
+  checkpoint `df103765ae99`, `291` trades, `-10.76%` audit return, PF `0.86`,
+  max DD `18.77%`, bootstrap positive-expectancy probability `12.1%`.
+  Decision: `REJECT`.
+- May 2025-May 2026, long-only:
+  checkpoint `93342bff7992`, `157` trades, `-9.66%` audit return, PF `0.78`,
+  max DD `13.34%`, bootstrap positive-expectancy probability `8.6%`.
+  Decision: `REJECT`.
+
+Conclusion: the family found recent-regime signal, but it failed the longer
+window and long-only did not fix the stop-out problem. Do not promote
+`adaptive_momentum_pullback` to paper runtime. The next new-family work should
+avoid another EMA threshold tweak and instead test a true regime-conditioned
+model, e.g. only enabling trend continuation after a pre-declared volatility
+compression / expansion state or after a portfolio-level breadth confirmation.

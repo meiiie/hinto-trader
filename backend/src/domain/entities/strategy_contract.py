@@ -110,3 +110,19 @@ DONCHIAN_BREAKOUT_RUNNER = StrategyContract(
         "designed for low win rate / larger winner distributions",
     ),
 )
+
+
+MOMENTUM_PULLBACK_RUNNER = StrategyContract(
+    strategy_id="adaptive_momentum_pullback",
+    family=StrategyFamily.TREND_CONTINUATION,
+    payoff_shape=PayoffShape.POSITIVE_SKEW,
+    min_reward_to_risk=1.8,
+    max_loss_r=1.0,
+    requires_short_selling=True,
+    requires_leverage=False,
+    validation_notes=(
+        "research track: time-series momentum with pullback/reclaim entry",
+        "avoid raw breakout chasing; require multi-horizon trend first",
+        "must survive fixed-universe and out-of-sample tests before paper use",
+    ),
+)

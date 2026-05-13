@@ -324,6 +324,36 @@ Next deterministic experiments:
 - stress maker assumptions with taker-fee and worse-fill variants;
 - simplify filters before adding new parameters.
 
+### Track D: Momentum Pullback
+
+Purpose: test a trend-continuation family that does not buy raw breakouts.
+The setup first requires multi-horizon time-series momentum, then enters only
+when price pulls back and reclaims a short EMA with a capped ATR/swing stop.
+
+Current implementation status:
+
+- `--strategy-id adaptive_momentum_pullback` is available for research
+  backtests.
+- It uses 24-bar and 96-bar momentum, EMA fast/slow alignment, reclaim candle
+  body, volume ratio, swing invalidation, and a `2.4R` target.
+- It is positive-skew in contract shape, but the current exit distribution has
+  not yet produced true large-runner behavior.
+
+Latest result:
+
+- Feb-May 2026 fixed universe looked promising but still rejected:
+  `+3.16%`, PF `1.13`, `107` trades, DD `7.72%`, bootstrap positive
+  `70.15%`.
+- May 2025-May 2026 rejected the hypothesis:
+  `-10.76%`, PF `0.86`, `291` trades, DD `18.77%`, bootstrap positive
+  `12.1%`.
+- Long-only did not fix it:
+  `-9.66%`, PF `0.78`, `157` trades, DD `13.34%`.
+
+Decision: keep the implementation as a research family, but do not promote it
+to Paper. Recent-window performance is not enough; the one-year window shows
+the stop-out profile is still structurally weak.
+
 ## Broker Expansion Policy
 
 Do not wire live automation to a broker unless the broker has an official API
