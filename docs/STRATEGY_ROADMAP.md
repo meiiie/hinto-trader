@@ -651,24 +651,43 @@ before the test, then evaluate it on untouched windows.
 
 The first pre-registered symbol-quality walk-forward was also rejected. It used
 each prior 3-month window to score symbols by training-window PnL, excess
-stop-rate, and uncertainty penalty, then tested the selected 6-symbol set on
-the next 3-month window:
+stop-rate, and uncertainty penalty, filtered the ranked list to symbols that
+passed quality/coverage at the next test-window start, then tested the selected
+6-symbol set on the next 3-month window:
 
 - `2025-05-11` to `2025-08-11` trained selection, `2025-08-11` to
-  `2025-11-11` test: selected set produced `NO_TRADES` after quality filtering;
-  baseline was about `-8.01%`.
+  `2025-11-11` test: selected set improved the baseline but still failed,
+  about `-6.80%`, PF `0.40`, and bootstrap positive-expectancy probability
+  only about `0.2%`; baseline was about `-8.01%`.
 - `2025-08-11` to `2025-11-11` trained selection, `2025-11-11` to
-  `2026-02-11` test: selected set again produced `NO_TRADES`; baseline was
-  about `+1.08%`.
+  `2026-02-11` test: selected set beat baseline, about `+3.59%`, PF `1.55`,
+  `36` trades, and bootstrap positive-expectancy probability about `88.6%`;
+  baseline was about `+1.08%`.
 - `2025-11-11` to `2026-02-11` trained selection, `2026-02-11` to
-  `2026-05-11` test: selected set returned about `+0.62%`, PF `1.09`, and
-  bootstrap positive-expectancy probability about `58%`; baseline was about
-  `+3.14%`, PF `1.67`.
+  `2026-05-11` test: selected set stayed positive but underperformed baseline,
+  about `+1.76%`, PF `1.33`, `28` trades, and bootstrap positive-expectancy
+  probability about `79.2%`; baseline was about `+3.14%`, PF `1.67`.
 
-This is not an edge. It is a useful negative result: outcome-only symbol
-selection either avoids trading or underperforms the baseline. Future symbol
-selection must start with coverage and liquidity eligibility, then add
-stop-before-target features. Do not use this walk-forward to alter Paper.
+This is not an edge. It is a useful negative result: eligibility-aware
+trade-outcome selection reduced average damage, from about `-1.26%` baseline to
+about `-0.48%`, but it still had one severe negative OOS window and did not
+beat the baseline in the most recent test. Future symbol selection must start
+with coverage and liquidity eligibility, then add stop-before-target features.
+Do not use this walk-forward to alter Paper.
+
+Follow-up stop-first audits on those selected runs are useful for feature
+design but not for production rules:
+
+- the failed first selected window had stable damage in `SHORT`, `LTCUSDT`,
+  `21:00`, `02:00`, and `LTCUSDT:LONG`;
+- the second selected window was positive and showed `SUIUSDT:SHORT` plus
+  `LONG@22:00` as harmful, but `SHORT` overall was protective;
+- the third selected window was positive and showed `15:00` as harmful, while
+  `BNBUSDT`, `LONG`, `SUIUSDT`, and `05:00` were protective.
+
+This rejects a simple global side or hour blacklist. The same category can
+flip from harmful to protective across windows. Use these fields as model
+features for stop-before-target probability, not as manual blocks.
 
 Next deterministic experiments:
 

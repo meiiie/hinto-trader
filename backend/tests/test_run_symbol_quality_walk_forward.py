@@ -5,6 +5,7 @@ import pytest
 from scripts.run_symbol_quality_walk_forward import (
     TrainTestWindow,
     _metrics,
+    filter_scores_to_allowed_symbols,
     parse_train_test_windows,
     score_symbols,
     select_symbols,
@@ -71,6 +72,15 @@ def test_select_symbols_fills_from_ranked_rows_when_evidence_is_sparse():
     )
 
     assert selected == ["AAAUSDT", "BBBUSDT"]
+
+
+def test_filter_scores_to_allowed_symbols_keeps_test_eligible_symbols_only():
+    rows = [
+        {"symbol": "AAAUSDT", "score": 1.0},
+        {"symbol": "BBBUSDT", "score": -0.5},
+    ]
+
+    assert filter_scores_to_allowed_symbols(rows, ["bbbusdt"]) == [{"symbol": "BBBUSDT", "score": -0.5}]
 
 
 def test_metrics_falls_back_to_summary_for_no_trade_runs():

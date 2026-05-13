@@ -169,6 +169,11 @@ def select_symbols(rows: list[dict[str, Any]], *, count: int) -> list[str]:
     return selected
 
 
+def filter_scores_to_allowed_symbols(rows: list[dict[str, Any]], allowed_symbols: list[str]) -> list[dict[str, Any]]:
+    allowed = {symbol.upper() for symbol in allowed_symbols}
+    return [row for row in rows if row["symbol"].upper() in allowed]
+
+
 def _newest_metadata(before: set[Path]) -> Path:
     created = sorted(set(ROOT.glob("experiment_*.json")) - before, key=lambda path: path.stat().st_mtime, reverse=True)
     if not created:
@@ -303,6 +308,8 @@ def _run_backtest(case: str, args: list[str], *, balance: float, risk: float, au
         "metadata_file": metadata_path.name,
         "trade_file": trade_path.name,
         "config_hash": metadata.get("config_hash"),
+        "requested_symbols": metadata.get("experiment_config", {}).get("requested_symbols", []),
+        "eligible_symbols": metadata.get("experiment_config", {}).get("eligible_symbols", []),
         "summary": metadata.get("summary", {}),
         "audit": audit,
     }
@@ -359,9 +366,6 @@ def run_symbol_quality_walk_forward(
             risk=risk,
             min_trades=min_train_trades,
         )
-        selected = select_symbols(symbol_scores, count=select_count)
-        test_breadth_min_symbols = max(3, min(5, len(selected)))
-
         baseline_args = _base_backtest_args(
             universe,
             start=window.test_start,
@@ -372,6 +376,18 @@ def run_symbol_quality_walk_forward(
             max_pos=max_pos,
             breadth_min_symbols=min(6, len(universe)),
         )
+
+        baseline_run = _run_backtest(
+            "test_universe_baseline",
+            baseline_args,
+            balance=balance,
+            risk=risk,
+            audit_runs=audit_runs,
+        )
+        test_eligible_symbols = baseline_run.get("eligible_symbols") or universe
+        eligible_symbol_scores = filter_scores_to_allowed_symbols(symbol_scores, test_eligible_symbols)
+        selected = select_symbols(eligible_symbol_scores, count=min(select_count, len(test_eligible_symbols)))
+        test_breadth_min_symbols = max(3, min(5, len(selected)))
         selected_args = _base_backtest_args(
             selected,
             start=window.test_start,
@@ -381,14 +397,6 @@ def run_symbol_quality_walk_forward(
             leverage=leverage,
             max_pos=max_pos,
             breadth_min_symbols=test_breadth_min_symbols,
-        )
-
-        baseline_run = _run_backtest(
-            "test_universe_baseline",
-            baseline_args,
-            balance=balance,
-            risk=risk,
-            audit_runs=audit_runs,
         )
         selected_run = _run_backtest(
             "test_selected_symbols",
@@ -401,7 +409,9 @@ def run_symbol_quality_walk_forward(
             {
                 "window": window.__dict__,
                 "selected_symbols": selected,
+                "test_eligible_symbols": test_eligible_symbols,
                 "top_symbol_scores": symbol_scores[: min(12, len(symbol_scores))],
+                "top_eligible_symbol_scores": eligible_symbol_scores[: min(12, len(eligible_symbol_scores))],
                 "train_run": train_run,
                 "baseline_run": baseline_run,
                 "selected_run": selected_run,
@@ -448,7 +458,10 @@ def run_symbol_quality_walk_forward(
         "min_train_trades": min_train_trades,
         "summary": summary,
         "rows": rows,
-        "notes": "Selected symbols are chosen from training-window trade outcomes only. Do not apply to Paper without separate OOS gates.",
+        "notes": (
+            "Selected symbols are ranked by training-window trade outcomes, then filtered to symbols "
+            "eligible at the test-window start. Do not apply to Paper without separate OOS gates."
+        ),
     }
 
 

@@ -469,25 +469,48 @@ realized volatility, stop-before-target history, and breadth participation.
 The next symbol-quality walk-forward converted that idea into
 `backend/scripts/run_symbol_quality_walk_forward.py`. For each train/test pair,
 the script trains on the earlier 3-month window, scores symbols by net PnL
-minus excess stop-rate and uncertainty penalties, then tests the selected
-symbols on the next 3-month window while also running the full 12-symbol
-baseline for comparison.
+minus excess stop-rate and uncertainty penalties, filters candidates to symbols
+that pass quality/coverage at the start of the test window, then tests the
+selected symbols on the next 3-month window while also running the full
+12-symbol baseline for comparison.
 
 Three train/test pairs were run:
 
 - train `2025-05-11` to `2025-08-11`, test `2025-08-11` to `2025-11-11`:
-  the selected set avoided the worst baseline loss, but generated no trades
-  after quality filtering. Baseline was about `-8.01%`.
+  selection improved the baseline but still failed hard: about `-6.80%`, PF
+  `0.40`, and only `0.2%` bootstrap positive-expectancy probability versus
+  baseline `-8.01%`.
 - train `2025-08-11` to `2025-11-11`, test `2025-11-11` to `2026-02-11`:
-  selected symbols again generated no trades, while the baseline was about
+  selection beat the baseline, about `+3.59%`, PF `1.55`, `36` trades, and
+  about `88.6%` bootstrap positive-expectancy probability versus baseline
   `+1.08%`.
 - train `2025-11-11` to `2026-02-11`, test `2026-02-11` to `2026-05-11`:
-  selected symbols returned about `+0.62%`, PF `1.09`, `33` trades, and only
-  about `58%` bootstrap positive-expectancy probability. The baseline returned
-  about `+3.14%`, PF `1.67`.
+  selection remained positive but underperformed the baseline: about `+1.76%`,
+  PF `1.33`, `28` trades, and about `79.2%` bootstrap positive-expectancy
+  probability versus baseline `+3.14%`.
 
-Conclusion: simple trade-outcome symbol ranking is not enough. It can avoid a
-bad window by not trading, but it also misses profitable windows and does not
-produce robust expectancy. Paper runtime remains unchanged. The next research
-step should rank symbols by coverage/liquidity and stop-before-target features
-available before the window, not by recent backtest PnL alone.
+Conclusion: coverage-aware trade-outcome symbol ranking is better than the
+first no-trade version, but still not an edge. It improved the average return
+from about `-1.26%` to `-0.48%` across the three test windows, yet one window
+was still deeply negative and the positive windows were small samples. Paper
+runtime remains unchanged. The next research step should rank symbols by
+pre-trade liquidity/volatility and stop-before-target features, not recent
+backtest PnL alone.
+
+Stop-first audits on the eligibility-aware selected runs added one more useful
+negative control:
+
+- the failed `2025-08-11` to `2025-11-11` selected test had stable harmful
+  groups in both halves: `SHORT`, `LTCUSDT`, `21:00`, `02:00`, and
+  `LTCUSDT:LONG`;
+- the positive `2025-11-11` to `2026-02-11` selected test had `SUIUSDT:SHORT`
+  and `LONG@22:00` as stable harmful groups, but `SHORT` overall was
+  protective;
+- the positive `2026-02-11` to `2026-05-11` selected test showed `15:00` as a
+  stable harmful group, while `BNBUSDT`, `LONG`, `SUIUSDT`, and `05:00` were
+  protective.
+
+Conclusion: time/side blocking is not stable enough yet. A broad rule such as
+"block all shorts" would have helped the first selected window but hurt a
+later positive one. Treat `21:00`, `02:00`, and `15:00` as candidate features
+for a stop-before-target model, not as hardcoded production blocks.
