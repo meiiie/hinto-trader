@@ -330,6 +330,12 @@ class BacktestEngine:
             if not symbols:
                 return {"error": "No eligible symbols after quality filter"}
 
+        if self.use_breadth_risk_gate and len(symbols) < self.breadth_min_symbols:
+            self._coverage_warnings.append(
+                "breadth_risk_gate_min_symbols_exceeds_eligible_universe: "
+                f"min={self.breadth_min_symbols}, eligible={len(symbols)}"
+            )
+
         # SOTA (Jan 2026): Load BTC candles for BTC filter
         if self.signal_generator.use_btc_filter:
             self.logger.info("📊 BTC FILTER: Loading BTC candles for trend detection...")
