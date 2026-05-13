@@ -237,3 +237,30 @@ window and long-only did not fix the stop-out problem. Do not promote
 avoid another EMA threshold tweak and instead test a true regime-conditioned
 model, e.g. only enabling trend continuation after a pre-declared volatility
 compression / expansion state or after a portfolio-level breadth confirmation.
+
+The 2026-05-13 volatility-squeeze follow-up implemented a new research family,
+`volatility_squeeze_breakout`, on the same pre-registered 12-symbol universe.
+The hypothesis was to enter only after volatility compression expands into a
+trend-aligned breakout.
+
+Results:
+
+- Raw squeeze breakout was rejected immediately:
+  `118` trades, `-22.43%` audit return, win rate `23.73%`, max DD `26.90%`.
+  The strategy was also found to recompute full Bollinger bandwidth history per
+  candle; this was fixed by limiting percentile computation to the required
+  recent window.
+- Adding a 96-bar structure breakout gate, stronger close-location filter,
+  tighter ATR stop, and lower `2.2R` first target improved risk containment:
+  `23` trades, `-2.88%` audit return, win rate `34.78%`, max DD `4.40%`.
+  It still had negative expectancy.
+- Adding ADX regime and `1.5x` volume confirmation produced the least bad
+  filtered run:
+  checkpoint `f6eb74e494d8`, `21` trades, `-2.01%` audit return, PF `0.60`,
+  max DD `3.54%`, bootstrap positive-expectancy probability `14.35%`.
+  Decision: `REJECT`.
+
+Conclusion: volatility compression is not yet a profitable standalone entry in
+this 15m Binance Futures setup. The MFE profile was too small for positive
+skew at 2x, with zero trades reaching `7%` ROE in the best filtered run. Keep
+the code as a research family/regime label, but do not update Paper runtime.

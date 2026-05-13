@@ -354,6 +354,49 @@ Decision: keep the implementation as a research family, but do not promote it
 to Paper. Recent-window performance is not enough; the one-year window shows
 the stop-out profile is still structurally weak.
 
+### Track E: Volatility Squeeze Breakout
+
+Purpose: test a volatility-compression family instead of another EMA threshold
+tweak. The setup waits for Bollinger bandwidth to contract versus its recent
+history, then requires expansion, trend alignment, volume confirmation, and a
+breakout through the prior structure high/low.
+
+Current implementation status:
+
+- `--strategy-id volatility_squeeze_breakout` is available for research
+  backtests.
+- The strategy computes only the recent bandwidth window required for squeeze
+  percentiles, avoiding the O(n^2) behavior found in the first implementation.
+- It requires a pre-breakout squeeze, current bandwidth expansion, EMA
+  alignment, volume ratio, 96-bar structure breakout, and strong candle close
+  location.
+- It is marked as a positive-skew research contract, but it is not a paper
+  runtime candidate.
+
+Latest result:
+
+- Raw squeeze breakout on the fixed 12-symbol Feb-May 2026 window was a clear
+  reject: `-22.43%`, `118` trades, win rate `23.73%`, max DD `26.90%`.
+- Adding the structure breakout gate cut damage materially but did not create
+  edge: `-2.88%`, `23` trades, win rate `34.78%`, max DD `4.40%`.
+- Adding ADX regime plus `1.5x` volume filter was the least bad variant:
+  checkpoint `f6eb74e494d8`, `21` trades, `-2.01%` audit return, PF `0.60`,
+  max DD `3.54%`, bootstrap positive-expectancy probability `14.35%`.
+
+Decision: `REJECT`. The idea is useful as a regime label, not as a standalone
+entry strategy. The MFE distribution showed no true runner behavior at 2x:
+zero trades reached `7%` ROE in the best filtered run. Do not promote
+`volatility_squeeze_breakout` to Paper.
+
+Next deterministic experiments:
+
+- use volatility squeeze as a router condition for the existing paper
+  mean-reversion family instead of entering breakout directly;
+- test breadth-confirmed expansion where at least several major symbols break
+  structure together before enabling trend continuation;
+- add Deflated-Sharpe or equivalent multiple-testing reporting before any
+  future parameter matrix is eligible for promotion.
+
 ## Broker Expansion Policy
 
 Do not wire live automation to a broker unless the broker has an official API
