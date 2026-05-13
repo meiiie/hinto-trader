@@ -498,6 +498,64 @@ Next deterministic experiments:
   execution can apply the same sizing contract;
 - keep long-only momentum as a diagnostic branch, not a runtime setting.
 
+### Track H: Portfolio Breadth Risk Gate
+
+Purpose: stop treating each symbol signal as isolated. The gate measures the
+current pre-registered universe and only allows LONG when enough symbols are in
+a bullish EMA-plus-momentum state, or SHORT when enough symbols are in a bearish
+state. This is intentionally a side filter around the existing execution model,
+not another standalone entry pattern.
+
+Research basis considered:
+
+- Market breadth research reports that breadth can add market-timing
+  information beyond simple trend/momentum signals:
+  https://www.sciencedirect.com/science/article/pii/S0264999319312982
+- Adaptive crypto trend-following work emphasizes portfolio construction,
+  rolling selection, asymmetric long/short allocation, and volatility-aware
+  exits rather than per-symbol threshold chasing:
+  https://arxiv.org/abs/2602.11708
+- Moreira/Muir remains the reference for reducing exposure when volatility or
+  broad risk is unfavorable, even though Hinto's current implementation is a
+  side gate rather than true volatility targeting:
+  https://www.nber.org/papers/w22208
+
+Current implementation status:
+
+- `--breadth-risk-gate` is available for research backtests.
+- The gate uses only the current low-timeframe histories already available in
+  the backtest loop; it does not look ahead.
+- It fails closed if too few symbols have enough history.
+- It reports separate LONG and SHORT block counts.
+- It is not wired to Paper runtime.
+
+Latest result:
+
+- Baseline fixed 12-symbol Feb-May 2026 mean-reversion run without breadth
+  gate: `127` trades, `+0.63%` audit return, PF `1.02`, max DD `9.11%`,
+  bootstrap positive-expectancy probability `55.9%`. Decision: `REJECT`.
+- Breadth gate with EMA `96`, momentum `24`, min symbols `9`, and side
+  threshold `0.60`: checkpoint `e3a2763b1d8a`, `33` trades, `+3.14%` audit
+  return, PF `1.67`, max DD `1.73%`, bootstrap positive-expectancy
+  probability `89.55%`.
+- Matrix scoreboard:
+  `backend/research_scoreboard_breadth_gate_3m_20260513.md`.
+
+Decision: `PAPER_ONLY_SMALL_SAMPLE`, but not promoted. This is the best
+portfolio-level improvement in the current round: it increased expectancy and
+cut drawdown sharply. It still fails sample-size and selection-adjusted
+bootstrap gates (`37.3%` after six tested cases), so it must remain research
+only.
+
+Next deterministic experiments:
+
+- run the same breadth gate on longer pre-registered windows and on a larger
+  fixed universe before changing Paper;
+- combine breadth with a true risk-budget/sizing contract only after Paper can
+  execute the same contract;
+- investigate whether `AVAXUSDT` and low-count loser symbols are structural
+  exclusions or merely sample noise, using pre-registered walk-forward splits.
+
 ## Broker Expansion Policy
 
 Do not wire live automation to a broker unless the broker has an official API

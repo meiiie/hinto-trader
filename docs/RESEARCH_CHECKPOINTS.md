@@ -328,3 +328,47 @@ Conclusion: volatility-gating helps compared with raw long/short momentum, but
 does not create a robust edge as a standalone entry family. Do not update Paper
 runtime. The next step should be a portfolio-level breadth/risk-on gate and
 true volatility-targeted sizing parity, not another per-symbol entry variant.
+
+The 2026-05-13 portfolio-breadth follow-up implemented a research-only
+`--breadth-risk-gate` in the backtest engine. The gate measures the current
+pre-registered universe at signal time and blocks LONG unless enough symbols
+are above their own EMA and have positive short momentum; it blocks SHORT under
+the symmetric bearish condition. It uses only already-available candle history
+and fails closed when coverage is too low.
+
+External research consulted for this round:
+
+- Market breadth as a timing signal:
+  https://www.sciencedirect.com/science/article/pii/S0264999319312982
+- Adaptive crypto trend-following and portfolio construction:
+  https://arxiv.org/abs/2602.11708
+- Volatility-managed exposure:
+  https://www.nber.org/papers/w22208
+
+Results on the fixed 12-symbol Feb-May 2026 2x research universe:
+
+- Baseline without breadth gate:
+  `127` trades, `+0.63%` audit return, PF `1.02`, max DD `9.11%`,
+  bootstrap positive-expectancy probability `55.9%`. Decision: `REJECT`.
+- Breadth gate EMA `96`, momentum `24`, threshold `0.55`:
+  `43` trades, `+0.81%` audit return, PF `1.09`, max DD `2.18%`,
+  bootstrap positive-expectancy probability `60.95%`.
+- Breadth gate EMA `96`, momentum `24`, threshold `0.60`:
+  checkpoint `checkpoint_20260513_032151_888602_e3a2763b1d8a.json`,
+  `33` trades, `+3.14%` audit return, PF `1.665`, max DD `1.73%`,
+  bootstrap positive-expectancy probability `89.55%`.
+- Breadth gate EMA `192`, momentum `48`, threshold `0.60`:
+  `58` trades, `+2.41%` audit return, PF `1.20`, max DD `3.02%`,
+  bootstrap positive-expectancy probability `75.65%`.
+
+The scoreboard file
+`backend/research_scoreboard_breadth_gate_3m_20260513.md` ranks the threshold
+`0.60` / `0.65` runs highest, but every case remains `FAIL` after sample-size
+and selection-adjusted bootstrap gates. The best run is promising, not
+promotion-ready: it has only `33` trades and selection-adjusted bootstrap is
+only `37.3%` after six tested cases.
+
+Conclusion: breadth gating is the strongest architecture direction found in
+this round because it improves return, PF, expectancy, and drawdown versus the
+same baseline. It is still research-only. No Paper runtime or `.env` setting
+was changed.
