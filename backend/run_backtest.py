@@ -723,6 +723,18 @@ async def main():
                        help="[RESEARCH] BTC LTF lookback bars for impulse filter. Default: 4")
     parser.add_argument("--btc-impulse-threshold-pct", type=float, default=0.5,
                        help="[RESEARCH] BTC LTF impulse threshold %% to block counter-trend side. Default: 0.5")
+    parser.add_argument("--breadth-risk-gate", action="store_true",
+                       help="[RESEARCH] Block LONG/SHORT unless enough symbols agree with the side. Default: OFF")
+    parser.add_argument("--breadth-ema-bars", type=int, default=96,
+                       help="[RESEARCH] EMA bars for portfolio breadth state. Default: 96")
+    parser.add_argument("--breadth-momentum-bars", type=int, default=24,
+                       help="[RESEARCH] Momentum bars for portfolio breadth state. Default: 24")
+    parser.add_argument("--breadth-long-threshold", type=float, default=0.55,
+                       help="[RESEARCH] Minimum bullish breadth ratio to allow LONG. Default: 0.55")
+    parser.add_argument("--breadth-short-threshold", type=float, default=0.55,
+                       help="[RESEARCH] Minimum bearish breadth ratio to allow SHORT. Default: 0.55")
+    parser.add_argument("--breadth-min-symbols", type=int, default=6,
+                       help="[RESEARCH] Minimum evaluated symbols for breadth gate; otherwise fail closed. Default: 6")
     # F1: Escalating CB Cooldown
     parser.add_argument("--escalating-cb", action="store_true",
                        help="[RISK] Escalating CB cooldown: longer blocks after more consecutive losses. Default: OFF")
@@ -1273,6 +1285,17 @@ async def main():
         print(f"   BTC {args.interval} lookback: {args.btc_impulse_lookback_bars} bars | Threshold: {args.btc_impulse_threshold_pct}%")
         print(f"   Positive BTC impulse -> block SHORT | Negative BTC impulse -> block LONG")
 
+    if args.breadth_risk_gate:
+        print("Portfolio Breadth Gate: ENABLED")
+        print(
+            f"   EMA bars={args.breadth_ema_bars} | Momentum bars={args.breadth_momentum_bars} | "
+            f"min symbols={args.breadth_min_symbols}"
+        )
+        print(
+            f"   Allow LONG if bullish breadth >= {args.breadth_long_threshold:.2f} | "
+            f"allow SHORT if bearish breadth >= {args.breadth_short_threshold:.2f}"
+        )
+
     # OPTIMIZATION (Jan 2026): Optimized Exit Parameters Status
     # Priority: --breakeven-r/--trailing-atr > --use-optimized-exits > defaults
     actual_breakeven = args.breakeven_r if args.breakeven_r is not None else (0.8 if args.use_optimized_exits else 1.5)
@@ -1656,6 +1679,12 @@ async def main():
         use_btc_impulse_filter=args.btc_impulse_filter,
         btc_impulse_lookback_bars=args.btc_impulse_lookback_bars,
         btc_impulse_threshold_pct=args.btc_impulse_threshold_pct,
+        use_breadth_risk_gate=args.breadth_risk_gate,
+        breadth_ema_bars=args.breadth_ema_bars,
+        breadth_momentum_bars=args.breadth_momentum_bars,
+        breadth_long_threshold=args.breadth_long_threshold,
+        breadth_short_threshold=args.breadth_short_threshold,
+        breadth_min_symbols=args.breadth_min_symbols,
     )
 
     # 4. Run Portfolio
@@ -1706,6 +1735,12 @@ async def main():
         )
     if stats.get("research_symbol_side_blocks"):
         print(f"🧪 Symbol-Side Blacklist Blocks: {stats['research_symbol_side_blocks']}")
+    if stats.get("breadth_long_blocks") or stats.get("breadth_short_blocks"):
+        print(
+            "Breadth Gate Blocks: "
+            f"LONG {stats.get('breadth_long_blocks', 0)} | "
+            f"SHORT {stats.get('breadth_short_blocks', 0)}"
+        )
     coverage_warnings = stats.get("coverage_warnings") or []
     for warning in coverage_warnings:
         print(f"⚠ Coverage:        {warning}")
@@ -1864,6 +1899,15 @@ async def main():
         risk_stats.append(f"  BTC Impulse Blocks: {engine._btc_impulse_blocks}")
         risk_stats.append(
             f"  BTC {args.interval} impulse: {args.btc_impulse_lookback_bars} bars | Threshold: {args.btc_impulse_threshold_pct}%"
+        )
+    if args.breadth_risk_gate:
+        risk_stats.append(
+            f"  Breadth Gate Blocks: LONG {engine._breadth_long_blocks} | SHORT {engine._breadth_short_blocks}"
+        )
+        risk_stats.append(
+            f"  Breadth gate: EMA {args.breadth_ema_bars}, momentum {args.breadth_momentum_bars}, "
+            f"min symbols {args.breadth_min_symbols}, thresholds L/S "
+            f"{args.breadth_long_threshold:.2f}/{args.breadth_short_threshold:.2f}"
         )
     if risk_stats:
         print("\n--- Risk Enhancement Stats ---")
