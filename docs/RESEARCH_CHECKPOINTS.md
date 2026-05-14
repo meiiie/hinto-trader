@@ -514,3 +514,37 @@ Conclusion: time/side blocking is not stable enough yet. A broad rule such as
 "block all shorts" would have helped the first selected window but hurt a
 later positive one. Treat `21:00`, `02:00`, and `15:00` as candidate features
 for a stop-before-target model, not as hardcoded production blocks.
+
+The 2026-05-14 go-trader-inspired cross-check reviewed
+`https://github.com/richkuo/go-trader` for architecture and strategy-family
+ideas, then reran Hinto analogues on the same fixed 12-symbol research universe
+from `2026-02-11` to `2026-05-11` with `$100`, `2x`, realistic fees, volume
+slippage, 1m monitoring, adversarial path, BTC regime filter, and portfolio
+risk guards.
+
+Results:
+
+- current Hinto benchmark, `liquidity_sniper_mean_reversion` with bounce plus
+  breadth gate: checkpoint
+  `checkpoint_20260514_154541_296925_5dc2ae7c1d06.json`, `33` trades, about
+  `+3.14%` audit return, PF `1.665`, max DD `1.73%`, bootstrap positive
+  expectancy probability `89.55%`, but selection-adjusted bootstrap only about
+  `37.3%`; decision `PAPER_ONLY_SMALL_SAMPLE`;
+- `adaptive_momentum_pullback`: checkpoint
+  `checkpoint_20260514_154541_650100_ebf32e1feca8.json`, `107` trades, about
+  `+3.16%` audit return, PF `1.1267`, max DD `7.72%`, bootstrap positive
+  expectancy probability `70.15%`; decision `REJECT`;
+- `volatility_squeeze_breakout`: about `-2.87%`, PF `0.5109`;
+- `volatility_managed_momentum`: about `-5.30%`, PF `0.7414`;
+- `liquidity_sweep_reversal`: about `-6.32%`, PF `0.2877`;
+- `donchian_breakout_trend_runner`: about `-13.32%`, PF `0.5621`.
+
+Scoreboard:
+`backend/research_scoreboard_go_trader_inspired_20260514.md`.
+
+Conclusion: no Paper runtime setting was changed. The reference repo's useful
+lesson is architecture, not immediate signal logic: keep open/close strategy
+composition explicit, gate entries by regime without blocking exits, and
+preserve next-bar/no-lookahead invariants. The next eligible Hinto improvement
+should be a pre-registered stop-before-target probability model or router, not
+another manually selected breakout/sweep variant.

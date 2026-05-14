@@ -699,6 +699,70 @@ Next deterministic experiments:
 - keep Paper runtime unchanged until a pre-registered rule passes OOS,
   fee/slippage stress, and selection-adjusted bootstrap gates.
 
+### Track K: go-trader-Inspired Strategy Family Cross-Check
+
+Purpose: learn from a mature open-source crypto bot without copying its code or
+letting an external design override Hinto's execution simulator. The reference
+repo (`https://github.com/richkuo/go-trader`) currently exposes useful
+architecture patterns:
+
+- separate open and close strategy registries;
+- explicit paper/live ownership and persisted state;
+- regime-gated entries where closes still run;
+- ATR-aware tiered exits and post-TP stop handling;
+- a backtest invariant that signals fill on the next bar and regime gates read
+  only prior-bar information.
+
+Those ideas mostly map to Hinto's existing research surface already:
+
+- `donchian_breakout_trend_runner` as the Donchian/breakout analogue;
+- `liquidity_sweep_reversal` as the liquidity sweep analogue;
+- `volatility_squeeze_breakout` as the squeeze/breakout analogue;
+- `adaptive_momentum_pullback` and `volatility_managed_momentum` as momentum
+  analogues;
+- `liquidity_sniper_mean_reversion` plus breadth gating as the current Hinto
+  benchmark.
+
+On 2026-05-14, a same-window, same-cost comparison was rerun on the fixed
+12-symbol research universe from `2026-02-11` to `2026-05-11`, `$100` capital,
+`2x` leverage, `1%` risk, realistic maker/taker fees, 1m monitoring,
+adversarial intrabar path, volume slippage, max-SL validation, BTC regime
+filter, and the same portfolio risk guards:
+
+- `liquidity_sniper_mean_reversion` with bounce plus breadth gate:
+  `33` trades, about `+3.14%` audit return, PF `1.67`, max DD `1.73%`. Checkpoint:
+  `checkpoint_20260514_154541_296925_5dc2ae7c1d06.json`. Decision:
+  `PAPER_ONLY_SMALL_SAMPLE`; no paper suggestion because research-only gates
+  are not yet fully representable in runtime settings.
+- `adaptive_momentum_pullback`: `107` trades, about `+3.16%` audit return,
+  PF `1.13`, max DD `7.72%`. Checkpoint:
+  `checkpoint_20260514_154541_650100_ebf32e1feca8.json`. Decision:
+  `REJECT`; bootstrap and selection-adjusted robustness were too weak.
+- `volatility_squeeze_breakout`: `23` trades, about `-2.87%`, PF `0.51`.
+- `volatility_managed_momentum`: `83` trades, about `-5.30%`, PF `0.74`.
+- `liquidity_sweep_reversal`: `30` trades, about `-6.32%`, PF `0.29`.
+- `donchian_breakout_trend_runner`: `121` trades, about `-13.32%`, PF `0.56`,
+  max DD `17.32%`.
+
+Scoreboard:
+`backend/research_scoreboard_go_trader_inspired_20260514.md`.
+
+Decision: do not switch Paper to a go-trader-inspired breakout or sweep family.
+The best positive result remains too small-sample, and the broader family test
+shows that breakout/sweep entries lose too often once realistic fees, slippage,
+and stop-first path assumptions are applied. The valuable lesson from
+go-trader is architectural: keep strategy composition explicit, regime gates
+entry-only, exits independent, and paper/live state auditable.
+
+Next deterministic experiments:
+
+- add a true pre-trade stop-before-target probability feature pack rather than
+  another raw breakout variant;
+- use session/time and liquidity features as model inputs, not manual blocks;
+- if a new router is added, pre-register the routing rule before testing and
+  compare it against both the mean-reversion benchmark and
+  `adaptive_momentum_pullback` on untouched windows.
+
 ## Broker Expansion Policy
 
 Do not wire live automation to a broker unless the broker has an official API
