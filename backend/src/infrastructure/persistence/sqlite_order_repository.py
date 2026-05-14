@@ -154,6 +154,25 @@ class SQLiteOrderRepository(IOrderRepository):
             except sqlite3.OperationalError:
                 pass
 
+            # Paper-real provenance: keep source signal quality after converting
+            # a signal into a pending paper order.
+            try:
+                cursor.execute('ALTER TABLE paper_positions ADD COLUMN signal_id TEXT')
+            except sqlite3.OperationalError:
+                pass
+            try:
+                cursor.execute('ALTER TABLE paper_positions ADD COLUMN confidence REAL')
+            except sqlite3.OperationalError:
+                pass
+            try:
+                cursor.execute('ALTER TABLE paper_positions ADD COLUMN confidence_level TEXT')
+            except sqlite3.OperationalError:
+                pass
+            try:
+                cursor.execute('ALTER TABLE paper_positions ADD COLUMN risk_reward_ratio REAL')
+            except sqlite3.OperationalError:
+                pass
+
             # SOTA FIX (Jan 2026): Add tp_hit_count to live_positions for TP tracking
             try:
                 cursor.execute('ALTER TABLE live_positions ADD COLUMN tp_hit_count INTEGER DEFAULT 0')
@@ -254,8 +273,9 @@ class SQLiteOrderRepository(IOrderRepository):
                     leverage, margin, liquidation_price,
                     stop_loss, take_profit,
                     open_time, close_time, realized_pnl, exit_reason,
-                    highest_price, lowest_price, atr
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    highest_price, lowest_price, atr,
+                    signal_id, confidence, confidence_level, risk_reward_ratio
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 position.id, position.symbol, position.side, position.status,
                 position.entry_price, position.quantity,
@@ -265,7 +285,9 @@ class SQLiteOrderRepository(IOrderRepository):
                 position.close_time.isoformat() if position.close_time else None,
                 position.realized_pnl, position.exit_reason,
                 position.highest_price, position.lowest_price,
-                position.atr
+                position.atr,
+                position.signal_id, position.confidence,
+                position.confidence_level, position.risk_reward_ratio
             ))
             conn.commit()
 
@@ -356,6 +378,12 @@ class SQLiteOrderRepository(IOrderRepository):
 
     def _row_to_position(self, row) -> PaperPosition:
         """Convert DB row to PaperPosition object"""
+        def row_value(key, default=None):
+            try:
+                return row[key]
+            except (IndexError, KeyError, ValueError):
+                return default
+
         # Handle new columns if they exist (or default to 0.0)
         # Since we are using sqlite3.Row, we can check keys or use try/except
         try:
@@ -395,7 +423,11 @@ class SQLiteOrderRepository(IOrderRepository):
             exit_reason=row['exit_reason'],
             highest_price=highest_price,
             lowest_price=lowest_price,
-            atr=atr
+            atr=atr,
+            signal_id=row_value('signal_id'),
+            confidence=row_value('confidence'),
+            confidence_level=row_value('confidence_level'),
+            risk_reward_ratio=row_value('risk_reward_ratio')
         )
 
     def reset_database(self) -> None:

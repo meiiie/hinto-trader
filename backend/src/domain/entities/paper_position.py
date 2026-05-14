@@ -37,6 +37,14 @@ class PaperPosition:
     tp_hit_count: int = 0
     initial_quantity: float = 0.0  # Set when position opens
 
+    # Signal provenance for paper-real pending orders.
+    # These fields let the UI show the same confidence/R:R as the source signal
+    # after the signal is converted into a local paper order.
+    signal_id: Optional[str] = None
+    confidence: Optional[float] = None
+    confidence_level: Optional[str] = None
+    risk_reward_ratio: Optional[float] = None
+
     @property
     def notional_value(self) -> float:
         return self.entry_price * self.quantity
@@ -72,5 +80,9 @@ class PaperPosition:
             "exit_reason": self.exit_reason,
             "highest_price": self.highest_price,
             "lowest_price": self.lowest_price,
-            "atr": self.atr
+            "atr": self.atr,
+            "signal_id": self.signal_id,
+            "confidence": self.confidence,
+            "confidence_level": self.confidence_level,
+            "risk_reward_ratio": self.risk_reward_ratio
         }

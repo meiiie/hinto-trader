@@ -69,6 +69,7 @@ AGENTS.md
 
 # Database
 *.db
+*.db.checkpoint-backup-*
 *.sqlite
 *.sqlite3
 backend/data/cache/**/*.parquet
@@ -82,6 +83,20 @@ backend/data/market_intelligence.json
 data/cache/volume_rankings/
 portfolio_backtest_*.csv
 backend/portfolio_backtest_*.csv
+backend/experiment_*.json
+backend/research_matrix_*.json
+backend/research_scoreboard_*.json
+backend/research_scoreboard_*.md
+backend/symbol_quality_walk_forward_*.json
+backend/symbol_quality_walk_forward_*.md
+backend/stop_first_rule_audit_*.json
+backend/stop_first_rule_audit_*.md
+backend/walk_forward_*.json
+backend/walk_forward_*.md
+backend/aggressive_*.json
+backend/llm_research_*.json
+backend/llm_research_*.md
+backend/research_checkpoints/*.json
 run_bt.bat
 
 # Temp output files

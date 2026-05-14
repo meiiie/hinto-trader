@@ -1019,9 +1019,19 @@ class ExecutionSimulator:
         if allocated_capital <= 0: return
 
         # Risk Management
+        # Keep fixed leverage as an execution constraint, but cap notional by
+        # the configured account-risk budget. This matches paper mode: leverage
+        # controls required margin; risk_per_trade controls intended loss at SL.
         if self.fixed_leverage > 0:
             effective_leverage = min(self.fixed_leverage, symbol_max_leverage)
-            notional = allocated_capital * effective_leverage
+            max_notional_by_margin = allocated_capital * effective_leverage
+
+            if self.risk_per_trade > 0 and sl_dist_pct > 0:
+                risk_amt = self.balance * self.risk_per_trade
+                max_notional_by_risk = risk_amt / sl_dist_pct
+                notional = min(max_notional_by_margin, max_notional_by_risk)
+            else:
+                notional = max_notional_by_margin
         else:
             # Risk 1% of the ENTIRE balance per slot
             risk_amt = self.balance * self.risk_per_trade

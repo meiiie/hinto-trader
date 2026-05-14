@@ -3,29 +3,52 @@ Hinto Stock Backtest Runner (Portfolio Edition)
 
 CLI tool to run backtests on multiple pairs with SHARED CAPITAL.
 Usage:
-  python run_backtest.py --symbols "BTCUSDT,BNBUSDT" --days 30 --balance 10000 --leverage 10
-  python run_backtest.py --top 10 --days 30 --leverage 10 --no-cb
+  python run_backtest.py --symbols "BTCUSDT,BNBUSDT" --days 30 --balance 10000 --leverage 2
+  python run_backtest.py --top 10 --days 30 --leverage 2 --no-cb
 """
 
 import asyncio
 import argparse
 import logging
 import csv
+import hashlib
+import json
 from datetime import datetime, timedelta, timezone
 import os
+import subprocess
 import sys
 from typing import Any, List, Dict, Tuple, Optional
 
+current_dir = os.path.dirname(os.path.abspath(__file__))
+repo_root = os.path.dirname(current_dir)
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 # Load .env for BACKTEST_SYMBOLS / USE_FIXED_SYMBOLS
 from dotenv import load_dotenv
-_env_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
-if os.path.isdir(_env_dir):
-    load_dotenv(os.path.join(_env_dir, ".env"))
-else:
-    load_dotenv(_env_dir)
+
+
+def _load_backtest_env() -> Optional[str]:
+    candidates = [
+        os.path.join(os.getcwd(), ".env"),
+        os.path.join(os.getcwd(), os.pardir, ".env"),
+        os.path.join(current_dir, ".env"),
+        os.path.join(repo_root, ".env"),
+    ]
+    for candidate in candidates:
+        env_path = os.path.abspath(candidate)
+        if os.path.isfile(env_path):
+            load_dotenv(env_path)
+            return env_path
+    return None
+
+
+BACKTEST_ENV_PATH = _load_backtest_env()
 
 # Add src to path (Robust approach)
-current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
@@ -33,22 +56,102 @@ from src.infrastructure.di_container import DIContainer
 from src.application.backtest.backtest_engine import BacktestEngine
 from src.infrastructure.api.binance_rest_client import BinanceRestClient
 from src.application.backtest.execution_simulator import ExecutionSimulator
-from src.application.analysis.backtest_report import (
-    calculate_max_drawdown_pct,
-    write_equity_curve_csv,
-)
-from src.application.analysis.adaptive_regime_router import (
-    AdaptiveRegimeRouter,
-    AdaptiveRouterFeatures,
-    BEARISH_TOXIC_SHORT_BLACKLIST,
-    RollingRouterState,
-    get_router_research_exit_profile,
-    get_router_recommended_symbol_side_blocks,
-)
+try:
+    from src.application.analysis.backtest_report import (
+        calculate_max_drawdown_pct,
+        write_equity_curve_csv,
+    )
+except ModuleNotFoundError as exc:
+    if exc.name != "src.application.analysis.backtest_report":
+        raise
+
+    def calculate_max_drawdown_pct(equity_curve: List[Dict[str, Any]]) -> float:
+        peak = 0.0
+        max_drawdown = 0.0
+        for point in equity_curve:
+            balance = float(point.get("balance", 0.0) or 0.0)
+            peak = max(peak, balance)
+            if peak > 0:
+                drawdown = ((peak - balance) / peak) * 100.0
+                max_drawdown = max(max_drawdown, drawdown)
+        return max_drawdown
+
+    def write_equity_curve_csv(
+        path: str,
+        equity_curve: List[Dict[str, Any]],
+        *,
+        tz_offset_hours: int = 7,
+    ) -> None:
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["Time", "Balance"])
+            for point in equity_curve:
+                ts = point.get("time")
+                if isinstance(ts, datetime):
+                    ts = ts + timedelta(hours=tz_offset_hours)
+                    ts = ts.strftime("%Y-%m-%d %H:%M:%S")
+                writer.writerow([ts, point.get("balance", 0.0)])
 from src.application.signals.strategy_ids import DEFAULT_STRATEGY_ID, SUPPORTED_STRATEGY_IDS
 from src.application.analysis.trend_filter import TrendFilter
 from src.infrastructure.data.historical_data_loader import HistoricalDataLoader
 from src.config.market_mode import MarketMode, get_market_config
+from src.trading_contract import (
+    PRODUCTION_AC_THRESHOLD_EXIT,
+    PRODUCTION_ADX_MAX_THRESHOLD,
+    PRODUCTION_BLOCKED_WINDOWS_STR,
+    PRODUCTION_CLOSE_PROFITABLE_AUTO,
+    PRODUCTION_HARD_CAP_PCT,
+    PRODUCTION_LEVERAGE,
+    PRODUCTION_MAX_SL_PCT,
+    PRODUCTION_ORDER_TTL_MINUTES,
+    PRODUCTION_PORTFOLIO_TARGET_PCT,
+    PRODUCTION_PROFITABLE_THRESHOLD_PCT,
+    PRODUCTION_SL_ON_CANDLE_CLOSE,
+    PRODUCTION_SNIPER_LOOKBACK,
+    PRODUCTION_SNIPER_PROXIMITY,
+    PRODUCTION_USE_1M_MONITORING,
+    PRODUCTION_USE_ADX_MAX_FILTER,
+    PRODUCTION_USE_DELTA_DIVERGENCE,
+    PRODUCTION_USE_MAX_SL_VALIDATION,
+    PRODUCTION_USE_MTF_TREND,
+)
+
+
+def _json_default(value: Any) -> str:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return str(value)
+
+
+def _git_commit() -> str:
+    try:
+        commit = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=current_dir,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+        status = subprocess.check_output(
+            ["git", "status", "--porcelain"],
+            cwd=current_dir,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+        return f"{commit}-dirty" if status else commit
+    except Exception:
+        return "unknown"
+
+
+def _stable_config_hash(config: Dict[str, Any]) -> str:
+    payload = json.dumps(config, sort_keys=True, default=_json_default, ensure_ascii=True)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
+
+
+def _research_config_hash(config: Dict[str, Any]) -> str:
+    # Code commit is trace metadata. Keeping it out prevents a docs/code commit
+    # from changing the paper checkpoint hash when strategy inputs are identical.
+    hash_config = {k: v for k, v in config.items() if k != "git_commit"}
+    return _stable_config_hash(hash_config)
 
 # Setup logging
 logging.basicConfig(
@@ -57,6 +160,36 @@ logging.basicConfig(
 )
 logger = logging.getLogger("BacktestRunner")
 logger.setLevel(logging.INFO)
+
+
+def _load_adaptive_router_components():
+    try:
+        from src.application.analysis.adaptive_regime_router import (
+            AdaptiveRegimeRouter,
+            AdaptiveRouterFeatures,
+            BEARISH_TOXIC_SHORT_BLACKLIST,
+            RollingRouterState,
+            get_router_research_exit_profile,
+            get_router_recommended_symbol_side_blocks,
+        )
+    except ModuleNotFoundError as exc:
+        if exc.name == "src.application.analysis.adaptive_regime_router":
+            raise RuntimeError(
+                "Adaptive regime router is an optional research module and is not "
+                "available in this checkout. Run without adaptive router flags, or "
+                "restore that module before using --adaptive-regime-router or "
+                "--rolling-adaptive-router."
+            ) from exc
+        raise
+
+    return (
+        AdaptiveRegimeRouter,
+        AdaptiveRouterFeatures,
+        BEARISH_TOXIC_SHORT_BLACKLIST,
+        RollingRouterState,
+        get_router_research_exit_profile,
+        get_router_recommended_symbol_side_blocks,
+    )
 
 
 def _parse_symbol_side_blacklist(raw: str) -> List[Tuple[str, str]]:
@@ -139,58 +272,43 @@ def _resolve_symbols(
     elif args.symbols:
         symbols = [s.strip().upper() for s in args.symbols.split(",")]
     elif requested_top:
-        use_fixed = os.getenv("USE_FIXED_SYMBOLS", "false").lower() == "true"
+        print(f"ðŸ” Calculating top {requested_top} volume pairs at START DATE (dynamic mode)...")
 
-        if use_fixed:
-            print("ðŸ”’ Loading FIXED symbol list from .env (USE_FIXED_SYMBOLS=true)...")
-            backtest_symbols_str = os.getenv("BACKTEST_SYMBOLS", "")
+        from src.infrastructure.data.historical_volume_service import HistoricalVolumeService
 
-            if backtest_symbols_str:
-                symbols = [s.strip().upper() for s in backtest_symbols_str.split(",")]
-                symbols = symbols[:requested_top]
-                print(f"ðŸ“‹ Fixed symbols ({len(symbols)}): {symbols[:5]}...")
-            else:
-                print("âš ï¸ BACKTEST_SYMBOLS is empty in .env, falling back to dynamic mode")
-                use_fixed = False
+        volume_service = HistoricalVolumeService(market_mode=market_mode)
+        if args.fill_top_eligible:
+            candidate_limit = max(requested_top * 5, 100)
+            symbols, rejected_candidates = volume_service.get_top_eligible_symbols_at_date(
+                date=start_time,
+                limit=requested_top,
+                eligibility_fn=lambda sym: quality_filter.is_eligible(sym, as_of=start_time),
+                candidate_limit=candidate_limit,
+            )
+        else:
+            rejected_candidates = []
+            symbols = volume_service.get_top_symbols_at_date(
+                date=start_time,
+                limit=requested_top,
+            )
 
-        if not use_fixed:
-            print(f"ðŸ” Calculating top {requested_top} volume pairs at START DATE (dynamic mode)...")
-
-            from src.infrastructure.data.historical_volume_service import HistoricalVolumeService
-
-            volume_service = HistoricalVolumeService(market_mode=market_mode)
+        if not symbols:
+            print("âš ï¸ Historical volume fetch failed, using current top pairs...")
+            client = BinanceRestClient(market_mode=market_mode)
+            symbols = client.get_top_volume_pairs(limit=requested_top, quote_asset="USDT")
+        else:
             if args.fill_top_eligible:
-                candidate_limit = max(requested_top * 5, 100)
-                symbols, rejected_candidates = volume_service.get_top_eligible_symbols_at_date(
-                    date=start_time,
-                    limit=requested_top,
-                    eligibility_fn=lambda sym: quality_filter.is_eligible(sym, as_of=start_time),
-                    candidate_limit=candidate_limit,
+                rejected_count = len(rejected_candidates)
+                print(
+                    f"ðŸ“Š Top eligible {len(symbols)}/{requested_top} at {start_time.date()}: {symbols[:5]}..."
                 )
-            else:
-                rejected_candidates = []
-                symbols = volume_service.get_top_symbols_at_date(
-                    date=start_time,
-                    limit=requested_top,
-                )
-
-            if not symbols:
-                print("âš ï¸ Historical volume fetch failed, using current top pairs...")
-                client = BinanceRestClient(market_mode=market_mode)
-                symbols = client.get_top_volume_pairs(limit=requested_top, quote_asset="USDT")
-            else:
-                if args.fill_top_eligible:
-                    rejected_count = len(rejected_candidates)
+                if rejected_count > 0:
                     print(
-                        f"ðŸ“Š Top eligible {len(symbols)}/{requested_top} at {start_time.date()}: {symbols[:5]}..."
+                        f"ðŸ§¹ Preselection filter: scanned {min(candidate_limit, max(len(symbols) + rejected_count, 0))} "
+                        f"ranked symbols | rejected {rejected_count}"
                     )
-                    if rejected_count > 0:
-                        print(
-                            f"ðŸ§¹ Preselection filter: scanned {min(candidate_limit, max(len(symbols) + rejected_count, 0))} "
-                            f"ranked symbols | rejected {rejected_count}"
-                        )
-                else:
-                    print(f"ðŸ“Š Top {requested_top} at {start_time.date()}: {symbols[:5]}...")
+            else:
+                print(f"ðŸ“Š Top {requested_top} at {start_time.date()}: {symbols[:5]}...")
     else:
         symbols = ["BTCUSDT"]
 
@@ -207,7 +325,8 @@ def _router_ema(values: List[float], period: int) -> float:
     return ema_value
 
 
-def _build_adaptive_router(args: argparse.Namespace) -> AdaptiveRegimeRouter:
+def _build_adaptive_router(args: argparse.Namespace) -> Any:
+    AdaptiveRegimeRouter = _load_adaptive_router_components()[0]
     return AdaptiveRegimeRouter(
         neutral_breadth_threshold=args.router_neutral_breadth_threshold,
         neutral_spread_floor_pct=args.router_neutral_spread_floor_pct,
@@ -227,17 +346,18 @@ async def _build_rolling_router_schedule(
     market_mode: MarketMode,
     quality_filter,
     default_top: int,
-    router: AdaptiveRegimeRouter,
+    router: Any,
     step_hours: int,
-) -> tuple[Dict[str, RollingRouterState], List[str], Dict[str, datetime], int, int]:
+    pre_registered_universe: Optional[List[str]] = None,
+) -> tuple[Dict[str, Any], List[str], Dict[str, datetime], int, int]:
     """
     Research-only rolling router.
 
     Approximation by design:
     - recompute BTC regime on a fixed schedule
     - refresh breadth and tradable universe on the same schedule
-    - constrain daily ranking to a research candidate universe built from
-      start/mid/end historical rankings so the pass stays computationally viable
+    - constrain daily ranking to a research candidate universe known before
+      the test window runs, avoiding start/mid/end hindsight selection
 
     This is still cheaper than a fully intraday adaptive router, but it removes
     the biggest false-negative source in v0: a stale regime snapshot taken only
@@ -245,6 +365,15 @@ async def _build_rolling_router_schedule(
     """
     from src.infrastructure.data.historical_volume_service import HistoricalVolumeService
     from src.infrastructure.indicators.regime_detector import RegimeDetector
+
+    (
+        _AdaptiveRegimeRouter,
+        AdaptiveRouterFeatures,
+        _BEARISH_TOXIC_SHORT_BLACKLIST,
+        RollingRouterState,
+        _get_router_research_exit_profile,
+        get_router_recommended_symbol_side_blocks,
+    ) = _load_adaptive_router_components()
 
     volume_service = HistoricalVolumeService(market_mode=market_mode)
     router_loader = HistoricalDataLoader(market_mode=market_mode)
@@ -263,18 +392,13 @@ async def _build_rolling_router_schedule(
         history_error = quality_filter._check_history_depth(symbol_upper, as_of=as_of)
         return history_error is None
 
-    seed_limit = max(120, max(default_top, 50) * 3)
-    mid_time = start_time + ((end_time - start_time) / 2)
-    candidate_seed = set(
-        volume_service.get_top_symbols_at_date(date=start_time, limit=seed_limit)
-    )
-    candidate_seed.update(
-        volume_service.get_top_symbols_at_date(date=mid_time, limit=seed_limit)
-    )
-    candidate_seed.update(
-        volume_service.get_top_symbols_at_date(date=end_time, limit=seed_limit)
-    )
-    ranking_seed_universe = sorted(candidate_seed)
+    if pre_registered_universe:
+        ranking_seed_universe = sorted({sym.upper() for sym in pre_registered_universe})
+    else:
+        seed_limit = max(120, max(default_top, 50) * 3)
+        ranking_seed_universe = sorted(
+            set(volume_service.get_top_symbols_at_date(date=start_time, limit=seed_limit))
+        )
 
     start_ranked_raw = volume_service.get_top_symbols_at_date(
         date=start_time,
@@ -315,7 +439,7 @@ async def _build_rolling_router_schedule(
         tzinfo=utc7,
     )
 
-    schedule: Dict[str, RollingRouterState] = {}
+    schedule: Dict[str, Any] = {}
     union_symbols: set[str] = set()
     active_from: Dict[str, datetime] = {}
 
@@ -421,7 +545,12 @@ async def main():
     parser.add_argument("--end", type=str, help="End date YYYY-MM-DD")
     parser.add_argument("--balance", type=float, default=10000.0, help="Initial Shared Balance")
     parser.add_argument("--risk", type=float, default=0.01, help="Risk per trade. Example: 0.01")
-    parser.add_argument("--leverage", type=float, default=0.0, help="Fixed Leverage. Example: 5.0. If 0, use risk-based.")
+    parser.add_argument(
+        "--leverage",
+        type=float,
+        default=PRODUCTION_LEVERAGE,
+        help=f"Fixed leverage. Default: {PRODUCTION_LEVERAGE}x.",
+    )
     parser.add_argument("--cb", action="store_true", help="Enable Circuit Breaker. Default: disabled")
     parser.add_argument("--max-losses", type=int, default=5, help="Max consecutive losses before block. Default: 5")
     parser.add_argument("--cooldown", type=float, default=4, help="Cooldown hours after max losses. Default: 4")
@@ -436,8 +565,8 @@ async def main():
     parser.add_argument("--no-cb", action="store_true", help="Disable Circuit Breaker. Shorthand for not using --cb")
     parser.add_argument("--zombie-killer", action="store_true",
                        help="[OPTIONAL] Replace pending orders with new signals. Default: OFF (TTL45 preferred)")
-    parser.add_argument("--ttl", type=int, default=45,
-                       help="Order TTL in minutes. 0=GTC. Default: 45")
+    parser.add_argument("--ttl", type=int, default=PRODUCTION_ORDER_TTL_MINUTES,
+                       help=f"Order TTL in minutes. 0=GTC. Default: {PRODUCTION_ORDER_TTL_MINUTES}")
     parser.add_argument("--time-filter", action="store_true",
                        help="[LEGACY] Binary time filter. Blocks 4 Death Hours (VN: 00, 05, 11, 22)")
     parser.add_argument("--tiered-time", action="store_true",
@@ -446,8 +575,8 @@ async def main():
                        help="[SOTA] Block Tier 4 (05-13h) but use 100%%%% size for all other hours")
     parser.add_argument("--live-dz", action="store_true",
                        help="[LIVE PARITY] Exact LIVE dead zones: 05-06, 09-14, 19-21:30, 22-23:30 UTC+7")
-    parser.add_argument("--blocked-windows", type=str, default=None,
-                       help="Custom blocked windows (UTC+7). Format: '22:00-23:00,00:00-01:00'")
+    parser.add_argument("--blocked-windows", type=str, default=PRODUCTION_BLOCKED_WINDOWS_STR,
+                       help=f"Custom blocked windows (UTC+7). Default: '{PRODUCTION_BLOCKED_WINDOWS_STR}'")
     parser.add_argument("--full-tp", action="store_true",
                        help="[OPTIONAL] Close 100%%%% position at TP1 (instead of default 60%%%%)")
     parser.add_argument("--block-short-early", action="store_true",
@@ -462,8 +591,8 @@ async def main():
                        help="[EXPERIMENTAL] Enable fixed $3 profit exit strategy (backtest only). Default: OFF")
     parser.add_argument("--portfolio-target", type=float, default=0.0,
                        help="[INSTITUTIONAL] Portfolio profit target in USD. Exit all positions when total PnL >= target. 0=disabled. Example: 7.0")
-    parser.add_argument("--portfolio-target-pct", type=float, default=0.0,
-                       help="[INSTITUTIONAL] Portfolio profit target as %% of capital. 0=disabled. Example: 3.68 for 3.68%%")
+    parser.add_argument("--portfolio-target-pct", type=float, default=PRODUCTION_PORTFOLIO_TARGET_PCT,
+                       help=f"[INSTITUTIONAL] Portfolio profit target as %% of capital. Default: {PRODUCTION_PORTFOLIO_TARGET_PCT}")
     parser.add_argument("--signal-reversal-exit", action="store_true",
                        help="[INSTITUTIONAL] Exit positions on high-confidence opposite signals. Default: OFF")
     parser.add_argument("--reversal-confidence", type=float, default=0.90,
@@ -476,16 +605,18 @@ async def main():
                        help="[TUNING] Custom breakeven trigger in R-multiple. Example: 0.8 for 0.8R. Default: 1.5 (or 0.8 if --use-optimized-exits)")
     parser.add_argument("--trailing-atr", type=float, default=None,
                        help="[TUNING] Custom trailing stop in ATR multiple. Example: 2.5 for ATR*2.5. Default: 4.0 (or 2.5 if --use-optimized-exits)")
-    parser.add_argument("--close-profitable-auto", action="store_true",
-                       help="[EXPERIMENTAL] Auto-close positions when ROE > threshold. Default: OFF")
-    parser.add_argument("--profitable-threshold-pct", type=float, default=5.0,
-                       help="[EXPERIMENTAL] ROE threshold for auto-close (%%). Default: 5.0")
+    parser.add_argument("--close-profitable-auto", action=argparse.BooleanOptionalAction,
+                       default=PRODUCTION_CLOSE_PROFITABLE_AUTO,
+                       help=f"[EXPERIMENTAL] Auto-close positions when ROE > threshold. Default: {PRODUCTION_CLOSE_PROFITABLE_AUTO}")
+    parser.add_argument("--profitable-threshold-pct", type=float, default=PRODUCTION_PROFITABLE_THRESHOLD_PCT,
+                       help=f"[EXPERIMENTAL] ROE threshold for auto-close (%%). Default: {PRODUCTION_PROFITABLE_THRESHOLD_PCT}")
     parser.add_argument("--profitable-check-interval", type=int, default=1,
                        help="[EXPERIMENTAL] Check auto-close every N candles. Default: 1 (every candle)")
-    parser.add_argument("--max-sl-validation", action="store_true",
-                       help="[RISK] Enable MAX SL validation - reject signals with SL > max-sl-pct. Default: OFF")
-    parser.add_argument("--max-sl-pct", type=float, default=None,
-                       help="[RISK] Custom MAX SL percentage. Example: 1.5 for 1.5%%. If not set, uses 10%%/leverage. Default: None")
+    parser.add_argument("--max-sl-validation", action=argparse.BooleanOptionalAction,
+                       default=PRODUCTION_USE_MAX_SL_VALIDATION,
+                       help=f"[RISK] Enable MAX SL validation - reject signals with SL > max-sl-pct. Default: {PRODUCTION_USE_MAX_SL_VALIDATION}")
+    parser.add_argument("--max-sl-pct", type=float, default=PRODUCTION_MAX_SL_PCT,
+                       help=f"[RISK] Custom MAX SL percentage. Example: 1.5 for 1.5%%. Default: {PRODUCTION_MAX_SL_PCT}")
     parser.add_argument("--profit-lock", action="store_true",
                        help="[SOTA] Enable Profit Lock - when ROE >= threshold, move SL up to lock profit. Default: OFF")
     parser.add_argument("--profit-lock-threshold", type=float, default=5.0,
@@ -506,6 +637,14 @@ async def main():
                        help="[RISK] Rolling window in hours for symbol+side loss quarantine. Default: 72")
     parser.add_argument("--symbol-side-cooldown", type=float, default=72.0,
                        help="[RISK] Cooldown hours after symbol+side rolling loss limit hit. Default: 72")
+    parser.add_argument("--low-profit-pair-limit", type=int, default=0,
+                       help="[RISK] Freqtrade-inspired: block symbol after N closed trades in lookback if total PnL is below threshold. 0=disabled.")
+    parser.add_argument("--low-profit-pair-lookback", type=float, default=24.0,
+                       help="[RISK] Lookback hours for low-profit pair protection. Default: 24")
+    parser.add_argument("--low-profit-pair-cooldown", type=float, default=24.0,
+                       help="[RISK] Cooldown hours after low-profit pair protection triggers. Default: 24")
+    parser.add_argument("--low-profit-pair-required-pnl", type=float, default=0.0,
+                       help="[RISK] Minimum total PnL in USD required over the low-profit pair lookback. Default: 0")
     # INSTITUTIONAL (Feb 2026): 3 New Strategies for A/B Testing
     parser.add_argument("--adx-regime-filter", action="store_true",
                        help="[INSTITUTIONAL] Filter signals by ADX regime. ADX<20=block, 20-25=penalty. Default: OFF")
@@ -513,10 +652,11 @@ async def main():
                        help="[INSTITUTIONAL] Volatility-adjusted position sizing. ATR-scaled. Default: OFF")
     parser.add_argument("--dynamic-tp", action="store_true",
                        help="[INSTITUTIONAL] ATR-scaled dynamic TP/SL/AUTO_CLOSE. Default: OFF")
-    parser.add_argument("--sl-on-close-only", action="store_true",
-                       help="[v6.0.0] Only check SL on candle CLOSE (matches LIVE candle-close mode). Default: OFF")
-    parser.add_argument("--hard-cap-pct", type=float, default=2.0,
-                       help="[v6.2.0] Hard cap loss %% (tick-level). 0=disabled. Default: 2.0")
+    parser.add_argument("--sl-on-close-only", action=argparse.BooleanOptionalAction,
+                       default=PRODUCTION_SL_ON_CANDLE_CLOSE,
+                       help=f"[v6.0.0] Only check SL on candle CLOSE (matches LIVE candle-close mode). Default: {PRODUCTION_SL_ON_CANDLE_CLOSE}")
+    parser.add_argument("--hard-cap-pct", type=float, default=PRODUCTION_HARD_CAP_PCT,
+                       help=f"[v6.2.0] Hard cap loss %% (tick-level). 0=disabled. Default: {PRODUCTION_HARD_CAP_PCT}")
     # EXPERIMENTAL (Feb 2026): R:R Improvement & Risk Management
     parser.add_argument("--partial-close-ac", action="store_true",
                        help="[EXPERIMENTAL] Partial close 50%% at AC threshold, trail remaining 50%%. Default: OFF")
@@ -531,26 +671,27 @@ async def main():
     parser.add_argument("--htf-filter", action="store_true",
                        help="[EXPERIMENTAL] Block counter-trend signals (LONG vs BEARISH 4H, SHORT vs BULLISH 4H). Default: OFF")
     # Mean-reversion indicator filters (Feb 2026)
-    parser.add_argument("--adx-max-filter", action="store_true",
-                       help="[FILTER] Block when ADX > threshold (too trendy for mean-reversion). Default: OFF")
-    parser.add_argument("--adx-max-threshold", type=float, default=40.0,
-                       help="[FILTER] ADX max threshold. Default: 40.0")
+    parser.add_argument("--adx-max-filter", action=argparse.BooleanOptionalAction,
+                       default=PRODUCTION_USE_ADX_MAX_FILTER,
+                       help=f"[FILTER] Block when ADX > threshold (too trendy for mean-reversion). Default: {PRODUCTION_USE_ADX_MAX_FILTER}")
+    parser.add_argument("--adx-max-threshold", type=float, default=PRODUCTION_ADX_MAX_THRESHOLD,
+                       help=f"[FILTER] ADX max threshold. Default: {PRODUCTION_ADX_MAX_THRESHOLD}")
     parser.add_argument("--bb-filter", action="store_true",
                        help="[FILTER] Bollinger Bands: BUY near lower band, SELL near upper band. Default: OFF")
     parser.add_argument("--stochrsi-filter", action="store_true",
                        help="[FILTER] StochRSI: BUY when oversold (<30), SELL when overbought (>70). Default: OFF")
     # Entry parameter tuning
-    parser.add_argument("--sniper-lookback", type=int, default=20,
-                       help="[ENTRY] Swing point lookback period (candles). Default: 20")
-    parser.add_argument("--sniper-proximity", type=float, default=1.5,
-                       help="[ENTRY] Proximity threshold %% to swing point. Default: 1.5")
+    parser.add_argument("--sniper-lookback", type=int, default=PRODUCTION_SNIPER_LOOKBACK,
+                       help=f"[ENTRY] Swing point lookback period (candles). Default: {PRODUCTION_SNIPER_LOOKBACK}")
+    parser.add_argument("--sniper-proximity", type=float, default=PRODUCTION_SNIPER_PROXIMITY * 100.0,
+                       help=f"[ENTRY] Proximity threshold %% to swing point. Default: {PRODUCTION_SNIPER_PROXIMITY * 100.0}")
     parser.add_argument("--strategy-id", type=str, choices=SUPPORTED_STRATEGY_IDS,
                        default=os.getenv("HINTO_STRATEGY_ID", DEFAULT_STRATEGY_ID),
                        help="[RESEARCH] Signal strategy: default mean-reversion sniper or positive-skew reclaim runner.")
     parser.add_argument("--volume-slippage", action="store_true",
                        help="[SOTA] Volume-adjusted slippage (Almgren-Chriss sqrt-vol model). Default: OFF")
-    parser.add_argument("--1m-monitoring", action="store_true", dest="m1_monitoring",
-                       help="[SOTA] Monitor positions using 1m candles (matches LIVE SL on 1m close). Default: OFF")
+    parser.add_argument("--1m-monitoring", action=argparse.BooleanOptionalAction, default=PRODUCTION_USE_1M_MONITORING, dest="m1_monitoring",
+                       help=f"[SOTA] Monitor positions using 1m candles (matches LIVE SL on 1m close). Default: {PRODUCTION_USE_1M_MONITORING}")
     parser.add_argument("--adversarial-path", action="store_true",
                        help="[SOTA] Adversarial intra-bar path: always check SL direction first (De Prado). Default: OFF")
     parser.add_argument("--ac-tick-level", action="store_true",
@@ -569,12 +710,12 @@ async def main():
     parser.add_argument("--funding-filter", action="store_true",
                        help="[SOTA] Funding rate filter — block overcrowded directions (>0.05%%). Default: OFF")
     # Phase 1 Strategy Filters (Feb 2026): Volume Delta + MTF Trend
-    parser.add_argument("--delta-divergence", action="store_true",
-                       help="[STRATEGY] Volume Delta Divergence filter — block signals contradicted by volume delta. Default: OFF")
-    parser.add_argument("--mtf-trend", action="store_true",
-                       help="[STRATEGY] MTF Trend filter — block counter-trend using faster EMA on 4H. Default: OFF")
-    parser.add_argument("--mtf-ema", type=int, default=50,
-                       help="[STRATEGY] MTF trend EMA period on 4H candles (50=~8 days). Default: 50")
+    parser.add_argument("--delta-divergence", action=argparse.BooleanOptionalAction, default=PRODUCTION_USE_DELTA_DIVERGENCE,
+                       help=f"[STRATEGY] Volume Delta Divergence filter — block signals contradicted by volume delta. Default: {PRODUCTION_USE_DELTA_DIVERGENCE}")
+    parser.add_argument("--mtf-trend", action=argparse.BooleanOptionalAction, default=PRODUCTION_USE_MTF_TREND,
+                       help=f"[STRATEGY] MTF Trend filter — block counter-trend using faster EMA on 4H. Default: {PRODUCTION_USE_MTF_TREND}")
+    parser.add_argument("--mtf-ema", type=int, default=20,
+                       help="[STRATEGY] MTF trend EMA period on 4H candles (50=~8 days, 20=~3.3 days). Default: 20")
     # BTC Regime Filter (Feb 2026): Block counter-trend based on BTC 4H trend
     parser.add_argument("--btc-regime-filter", action="store_true",
                        help="[REGIME] Block counter-trend signals based on BTC 4H EMA cross + momentum. Default: OFF")
@@ -590,6 +731,18 @@ async def main():
                        help="[RESEARCH] BTC LTF lookback bars for impulse filter. Default: 4")
     parser.add_argument("--btc-impulse-threshold-pct", type=float, default=0.5,
                        help="[RESEARCH] BTC LTF impulse threshold %% to block counter-trend side. Default: 0.5")
+    parser.add_argument("--breadth-risk-gate", action="store_true",
+                       help="[RESEARCH] Block LONG/SHORT unless enough symbols agree with the side. Default: OFF")
+    parser.add_argument("--breadth-ema-bars", type=int, default=96,
+                       help="[RESEARCH] EMA bars for portfolio breadth state. Default: 96")
+    parser.add_argument("--breadth-momentum-bars", type=int, default=24,
+                       help="[RESEARCH] Momentum bars for portfolio breadth state. Default: 24")
+    parser.add_argument("--breadth-long-threshold", type=float, default=0.55,
+                       help="[RESEARCH] Minimum bullish breadth ratio to allow LONG. Default: 0.55")
+    parser.add_argument("--breadth-short-threshold", type=float, default=0.55,
+                       help="[RESEARCH] Minimum bearish breadth ratio to allow SHORT. Default: 0.55")
+    parser.add_argument("--breadth-min-symbols", type=int, default=6,
+                       help="[RESEARCH] Minimum evaluated symbols for breadth gate; otherwise fail closed. Default: 6")
     # F1: Escalating CB Cooldown
     parser.add_argument("--escalating-cb", action="store_true",
                        help="[RISK] Escalating CB cooldown: longer blocks after more consecutive losses. Default: OFF")
@@ -607,8 +760,9 @@ async def main():
     # LIKE-LIVE (Feb 2026): Fix all BT biases to match LIVE behavior
     parser.add_argument("--like-live", action="store_true",
                        help="[LIKE-LIVE] Enable all BT bias fixes: AC threshold exit + N+1 fill + 1m monitoring + SL on close + hard cap 2%%. Default: OFF")
-    parser.add_argument("--ac-threshold-exit", action="store_true",
-                       help="[LIKE-LIVE] AC exits at threshold price (not candle close). Fixes +8-12pp WR inflation. Default: OFF")
+    parser.add_argument("--ac-threshold-exit", action=argparse.BooleanOptionalAction,
+                       default=PRODUCTION_AC_THRESHOLD_EXIT,
+                       help=f"[LIKE-LIVE] AC exits at threshold price (not candle close). Fixes +8-12pp WR inflation. Default: {PRODUCTION_AC_THRESHOLD_EXIT}")
     parser.add_argument("--n1-fill", action="store_true",
                        help="[LIKE-LIVE] N+1 fill rule: signals from candle N fill on N+1. Fixes +5-8pp WR inflation. Default: OFF")
     # REALISTIC FILLS (Feb 2026): Fill at target price, not candle extreme
@@ -617,8 +771,8 @@ async def main():
                        help="[v6.5.12] Force-close ALL positions when dead zone starts (matches LIVE). Default: OFF")
     parser.add_argument("--no-realistic-fills", action="store_true",
                        help="[FILL] Disable realistic fills (revert to legacy: fill at candle LOW/HIGH). Default: realistic fills ON")
-    parser.add_argument("--fill-buffer", type=float, default=0.1,
-                       help="[FILL] Pessimistic fill buffer %%: price must overshoot target by this %% for fill. 0=no buffer (LIVE-like). Default: 0.1")
+    parser.add_argument("--fill-buffer", type=float, default=0.0,
+                       help="[FILL] Pessimistic fill buffer %%: price must overshoot target by this %% for fill. 0=no buffer (LIVE-like). Default: 0.0")
     # F3: Gradual Position Sizing (Balance Ramp)
     parser.add_argument("--balance-ramp", action="store_true",
                        help="[RISK] Gradual position sizing after large balance changes. Only with compounding (no --no-compound). Default: OFF")
@@ -732,8 +886,9 @@ async def main():
     elif args.symbols:
         symbols = [s.strip().upper() for s in args.symbols.split(",")]
     elif args.top:
-        # SOTA: Check if USE_FIXED_SYMBOLS is enabled in .env
-        use_fixed = os.getenv("USE_FIXED_SYMBOLS", "false").lower() == "true"
+        # An explicit --top request is a research universe override. Paper
+        # BACKTEST_SYMBOLS are only for fixed-symbol runs via --symbols.
+        use_fixed = False
 
         if use_fixed:
             # Load from BACKTEST_SYMBOLS in .env (avoids look-ahead bias)
@@ -802,18 +957,26 @@ async def main():
     if args.adaptive_regime_router or args.rolling_adaptive_router:
         _apply_router_research_contract_defaults(args)
 
-    rolling_router_schedule: Optional[Dict[str, RollingRouterState]] = None
+    rolling_router_schedule: Optional[Dict[str, Any]] = None
     rolling_router_exit_profiles: Optional[Dict[str, Dict[str, Any]]] = None
-    rolling_router_overlay_schedule: Optional[Dict[str, RollingRouterState]] = None
+    rolling_router_overlay_schedule: Optional[Dict[str, Any]] = None
     rolling_router_overlay_exit_profiles: Optional[Dict[str, Dict[str, Any]]] = None
     rolling_router_symbol_active_from: Optional[Dict[str, datetime]] = None
     engine_quality_filter = quality_filter
 
     if args.adaptive_regime_router:
-        from src.application.analysis.adaptive_regime_router import (
-            AdaptiveRegimeRouter,
-            AdaptiveRouterFeatures,
-        )
+        try:
+            (
+                _AdaptiveRegimeRouter,
+                AdaptiveRouterFeatures,
+                _BEARISH_TOXIC_SHORT_BLACKLIST,
+                _RollingRouterState,
+                _get_router_research_exit_profile,
+                get_router_recommended_symbol_side_blocks,
+            ) = _load_adaptive_router_components()
+        except RuntimeError as exc:
+            logger.error(str(exc))
+            return
         from src.infrastructure.indicators.regime_detector import RegimeDetector
 
         async def _load_router_features():
@@ -955,6 +1118,11 @@ async def main():
             print("Action:          Shield mode - no new entries")
             return
     if args.rolling_adaptive_router:
+        try:
+            get_router_research_exit_profile = _load_adaptive_router_components()[4]
+        except RuntimeError as exc:
+            logger.error(str(exc))
+            return
         if not end_time:
             logger.error("--rolling-adaptive-router requires a bounded --end date.")
             return
@@ -972,6 +1140,7 @@ async def main():
             default_top=args.top or 40,
             router=_build_adaptive_router(args),
             step_hours=args.rolling_adaptive_router_step_hours,
+            pre_registered_universe=symbols,
         )
         rolling_router_exit_profiles = {}
         for preset in {state.preset for state in rolling_router_schedule.values()}:
@@ -996,6 +1165,7 @@ async def main():
                 default_top=args.top or 40,
                 router=_build_adaptive_router(args),
                 step_hours=args.rolling_router_bear_overlay_step_hours,
+                pre_registered_universe=symbols,
             )
             rolling_router_overlay_schedule = {
                 key: state
@@ -1090,6 +1260,12 @@ async def main():
             f"Symbol-Side Quarantine: {args.symbol_side_loss_limit} losses/{args.symbol_side_loss_window}h "
             f"-> {args.symbol_side_cooldown}h block"
         )
+    if args.low_profit_pair_limit > 0:
+        print(
+            f"Low-Profit Pair Guard: {args.low_profit_pair_limit} trades/{args.low_profit_pair_lookback}h "
+            f"with total PnL < ${args.low_profit_pair_required_pnl:.2f} "
+            f"-> {args.low_profit_pair_cooldown}h block"
+        )
     if args.daily_loss_size_penalty > 0:
         print(f"📉 Daily Loss Size Penalty: -{args.daily_loss_size_penalty*100:.0f}%/loss (0 loss=100%, 1={100-args.daily_loss_size_penalty*100:.0f}%, 2={max(0,100-args.daily_loss_size_penalty*200):.0f}%, 3={max(0,100-args.daily_loss_size_penalty*300):.0f}%, 4={max(0,100-args.daily_loss_size_penalty*400):.0f}%)")
     print(f"📋 Signal Confirmation: {'ENABLED (2x)' if args.confirm else 'DISABLED'}")
@@ -1122,6 +1298,17 @@ async def main():
         print(f"BTC Impulse Filter: ENABLED")
         print(f"   BTC {args.interval} lookback: {args.btc_impulse_lookback_bars} bars | Threshold: {args.btc_impulse_threshold_pct}%")
         print(f"   Positive BTC impulse -> block SHORT | Negative BTC impulse -> block LONG")
+
+    if args.breadth_risk_gate:
+        print("Portfolio Breadth Gate: ENABLED")
+        print(
+            f"   EMA bars={args.breadth_ema_bars} | Momentum bars={args.breadth_momentum_bars} | "
+            f"min symbols={args.breadth_min_symbols}"
+        )
+        print(
+            f"   Allow LONG if bullish breadth >= {args.breadth_long_threshold:.2f} | "
+            f"allow SHORT if bearish breadth >= {args.breadth_short_threshold:.2f}"
+        )
 
     # OPTIMIZATION (Jan 2026): Optimized Exit Parameters Status
     # Priority: --breakeven-r/--trailing-atr > --use-optimized-exits > defaults
@@ -1461,7 +1648,15 @@ async def main():
     loader = HistoricalDataLoader()
 
     circuit_breaker = None
-    if args.cb or args.daily_symbol_loss_limit > 0 or args.daily_loss_size_penalty > 0 or args.symbol_side_loss_limit > 0 or args.escalating_cb or args.direction_block:
+    if (
+        args.cb
+        or args.daily_symbol_loss_limit > 0
+        or args.daily_loss_size_penalty > 0
+        or args.symbol_side_loss_limit > 0
+        or args.low_profit_pair_limit > 0
+        or args.escalating_cb
+        or args.direction_block
+    ):
         from src.application.risk_management.circuit_breaker import CircuitBreaker
         circuit_breaker = CircuitBreaker(
             max_consecutive_losses=args.max_losses if args.cb else 999,
@@ -1473,6 +1668,10 @@ async def main():
             symbol_side_loss_limit=args.symbol_side_loss_limit,
             symbol_side_loss_window_hours=args.symbol_side_loss_window,
             symbol_side_cooldown_hours=args.symbol_side_cooldown,
+            low_profit_pair_trade_limit=args.low_profit_pair_limit,
+            low_profit_pair_lookback_hours=args.low_profit_pair_lookback,
+            low_profit_pair_cooldown_hours=args.low_profit_pair_cooldown,
+            low_profit_pair_required_pnl=args.low_profit_pair_required_pnl,
             # F1: Escalating CB Cooldown
             use_escalating_cooldown=args.escalating_cb,
             escalating_schedule_str=args.escalating_cb_schedule,
@@ -1506,6 +1705,12 @@ async def main():
         use_btc_impulse_filter=args.btc_impulse_filter,
         btc_impulse_lookback_bars=args.btc_impulse_lookback_bars,
         btc_impulse_threshold_pct=args.btc_impulse_threshold_pct,
+        use_breadth_risk_gate=args.breadth_risk_gate,
+        breadth_ema_bars=args.breadth_ema_bars,
+        breadth_momentum_bars=args.breadth_momentum_bars,
+        breadth_long_threshold=args.breadth_long_threshold,
+        breadth_short_threshold=args.breadth_short_threshold,
+        breadth_min_symbols=args.breadth_min_symbols,
     )
 
     # 4. Run Portfolio
@@ -1556,6 +1761,12 @@ async def main():
         )
     if stats.get("research_symbol_side_blocks"):
         print(f"🧪 Symbol-Side Blacklist Blocks: {stats['research_symbol_side_blocks']}")
+    if stats.get("breadth_long_blocks") or stats.get("breadth_short_blocks"):
+        print(
+            "Breadth Gate Blocks: "
+            f"LONG {stats.get('breadth_long_blocks', 0)} | "
+            f"SHORT {stats.get('breadth_short_blocks', 0)}"
+        )
     coverage_warnings = stats.get("coverage_warnings") or []
     for warning in coverage_warnings:
         print(f"⚠ Coverage:        {warning}")
@@ -1704,6 +1915,13 @@ async def main():
         risk_stats.append(
             f"  Threshold: {args.symbol_side_loss_limit} losses / {args.symbol_side_loss_window}h -> {args.symbol_side_cooldown}h block"
         )
+    if args.low_profit_pair_limit > 0 and circuit_breaker:
+        risk_stats.append(f"  Low-Profit Pair Blocks: {circuit_breaker._blocked_by_low_profit_pair}")
+        risk_stats.append(
+            f"  Threshold: {args.low_profit_pair_limit} trades / {args.low_profit_pair_lookback}h "
+            f"with total PnL < ${args.low_profit_pair_required_pnl:.2f} -> "
+            f"{args.low_profit_pair_cooldown}h block"
+        )
     if args.balance_ramp:
         risk_stats.append(f"  Balance Ramp Adjustments: {simulator._ramp_adjustments}")
         risk_stats.append(f"  Rate: {args.balance_ramp_rate}, Threshold: {args.balance_ramp_threshold}")
@@ -1715,6 +1933,15 @@ async def main():
         risk_stats.append(
             f"  BTC {args.interval} impulse: {args.btc_impulse_lookback_bars} bars | Threshold: {args.btc_impulse_threshold_pct}%"
         )
+    if args.breadth_risk_gate:
+        risk_stats.append(
+            f"  Breadth Gate Blocks: LONG {engine._breadth_long_blocks} | SHORT {engine._breadth_short_blocks}"
+        )
+        risk_stats.append(
+            f"  Breadth gate: EMA {args.breadth_ema_bars}, momentum {args.breadth_momentum_bars}, "
+            f"min symbols {args.breadth_min_symbols}, thresholds L/S "
+            f"{args.breadth_long_threshold:.2f}/{args.breadth_short_threshold:.2f}"
+        )
     if risk_stats:
         print("\n--- Risk Enhancement Stats ---")
         for s in risk_stats:
@@ -1722,8 +1949,18 @@ async def main():
 
     print("="*60 + "\n")
 
-    # 6. Export to CSV
-    csv_filename = f"portfolio_backtest_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    # 6. Export to CSV. Include microseconds so parallel research runs do not
+    # overwrite each other, and reuse the same stamp for all artifacts.
+    run_stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    artifact_dir = current_dir
+    csv_artifact = f"portfolio_backtest_{run_stamp}.csv"
+    equity_artifact = f"equity_curve_{run_stamp}.csv" if equity_curve else None
+    replay_artifact = f"replay_data_{run_stamp}.json" if args.visual and result.get("replay_data") else None
+    metadata_artifact = f"experiment_{run_stamp}.json"
+    csv_filename = os.path.join(artifact_dir, csv_artifact)
+    equity_filename = os.path.join(artifact_dir, equity_artifact) if equity_artifact else None
+    replay_filename = os.path.join(artifact_dir, replay_artifact) if replay_artifact else None
+    metadata_filename = os.path.join(artifact_dir, metadata_artifact)
 
     # SOTA: Load timezone offset from .env (default: 7 for Vietnam)
     try:
@@ -1808,20 +2045,54 @@ async def main():
                 ])
         print(f"💾 Detailed trade log saved to: {csv_filename}")
         if equity_curve:
-            equity_filename = f"equity_curve_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
             write_equity_curve_csv(equity_filename, equity_curve, tz_offset_hours=tz_offset_hours)
             print(f"💾 Equity curve saved to: {equity_filename}")
 
         # SOTA (Jan 2026): Export Replay Data JSON if enabled
         if args.visual and 'replay_data' in result and result['replay_data']:
-            json_filename = f"replay_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
             try:
-                import json
-                with open(json_filename, 'w', encoding='utf-8') as f:
+                with open(replay_filename, 'w', encoding='utf-8') as f:
                     json.dump(result['replay_data'], f, indent=4, default=str)
-                print(f"📽️  UI Replay Data saved to: {json_filename}")
+                print(f"UI Replay Data saved to: {replay_filename}")
             except Exception as e:
                 logger.error(f"Failed to save Replay JSON: {e}")
+
+        experiment_config = {
+            "argv": sys.argv[1:],
+            "args": vars(args),
+            "requested_symbols": symbols,
+            "eligible_symbols": result.get("symbols", []),
+            "blocked_symbol_sides": blocked_symbol_sides,
+            "start_time_utc": start_time,
+            "end_time_utc": end_time,
+            "market_mode": market_mode.value,
+            "git_commit": _git_commit(),
+        }
+        metadata = {
+            "run_stamp": run_stamp,
+            "config_hash": _research_config_hash(experiment_config),
+            "created_at_utc": datetime.now(timezone.utc),
+            "experiment_config": experiment_config,
+            "artifacts": {
+                "trades_csv": csv_artifact,
+                "equity_csv": equity_artifact,
+                "replay_json": replay_artifact,
+            },
+            "summary": {
+                "initial_balance": stats.get("initial_balance"),
+                "final_balance": stats.get("final_balance"),
+                "net_return_pct": stats.get("net_return_pct"),
+                "net_return_usd": stats.get("net_return_usd"),
+                "total_trades": stats.get("total_trades"),
+                "win_rate": stats.get("win_rate"),
+                "max_drawdown_pct": calculate_max_drawdown_pct(equity_curve) if equity_curve else None,
+                "quality_filter_rejections": stats.get("quality_filter_rejections"),
+                "termination_reason": stats.get("termination_reason"),
+            },
+        }
+        with open(metadata_filename, "w", encoding="utf-8") as f:
+            json.dump(metadata, f, indent=2, default=_json_default, ensure_ascii=False)
+        print(f"Experiment metadata saved to: {metadata_filename}")
 
     except Exception as e:
         logger.error(f"Failed to save CSV: {e}")

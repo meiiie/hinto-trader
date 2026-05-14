@@ -17,6 +17,166 @@ This is useful infrastructure. It is not yet enough evidence for a durable
 trading edge. The current payoff profile can become "many small wins, fewer
 large losses" if it is promoted based on win rate alone.
 
+## May 2026 Paper Audit
+
+Four-day Binance Futures backtests were initially run with paper-like settings: 1m
+monitoring, maker/taker fees, funding, max four positions, a historical 20x margin model,
+1% account-risk cap, MTF trend filter, and volume-delta divergence filter.
+
+Core 12-symbol result with the previous default (`AUTO_CLOSE` at `20% ROE`):
+
+- net return: `-14.73%`
+- trades: `37`
+- win rate: `37.84%`
+- average win/loss payoff: `0.79`
+- main failure cluster: late-US entries around `03:00-05:00 UTC+7`
+
+The issue was not only position sizing. Early auto-close compressed winners to
+about 1R, while stop losses plus fees and candle-close slippage were larger than
+1R. That made the payoff mathematically negative at the observed win rate.
+
+Paper-default adjustments after the audit:
+
+- disable early profitable auto-close by default;
+- keep the threshold at `40% ROE` for experiments that explicitly enable it;
+- add `03:00-05:00 UTC+7` to blocked windows;
+- enable the ADX max filter at `40` for the mean-reversion runtime path.
+
+After disabling auto-close, blocking `03:00-05:00`, and enabling the ADX max
+filter, the same core set improved to roughly `-5.4%` over the four-day window,
+with max drawdown down to about `9%`. This is better risk containment, not
+proof of edge.
+
+Thirty-day follow-up:
+
+- baseline contract defaults: about `-7.4%`, profit factor `0.90`, longest loss
+  streak `16`;
+- direction blocking reduced losses to about `-3.1%`, but did not create a
+  positive edge;
+- BTC regime/impulse filtering made results worse on this sample;
+- `--bounce-confirm --daily-symbol-loss-limit 2` was the best candidate, about
+  `+1.0%` with profit factor `1.02` and about `10.8%` max drawdown.
+
+This moves Hinto from "badly unsafe" toward "paper-observable", not toward live
+money. The right interpretation is that bounce confirmation may reduce false
+mean-reversion entries, while the remaining edge is too thin to trust.
+
+Sixty-day follow-up of the same paper candidate improved to about `+6.4%` with
+`135` trades and max drawdown around `14.1%`, but profit factor was only `1.07`.
+That is still below the promotion threshold. Treat it as a monitored paper
+candidate, not a live strategy.
+
+Major-universe follow-up:
+
+- `BTC, ETH, BNB, SOL, XRP` with `--bounce-confirm --daily-symbol-loss-limit 2`
+  improved to about `+17.7%` over 120 days, PF `1.21`, `126` trades, max
+  drawdown about `11.2%`;
+- the same major universe without bounce confirmation was about `-22.9%`, PF
+  `0.86`;
+- removing MTF trend or delta-divergence filters from the broad candidate was
+  strongly negative, so both filters remain part of the research contract.
+
+After bootstrap expectancy checks, this is better described as the strongest
+current paper experiment, not a candidate for promotion. Its bootstrap
+positive-expectancy probability was about `85%`, below the `90%` research gate,
+and the 5th-percentile bootstrapped return was still negative. The sample is
+far below 1,000 out-of-sample trades and one 30-day walk-forward window was
+blocked by missing 1m data coverage rather than forced through with incomplete
+intrabar information.
+
+Coverage also matters for interpreting the 120-day major-universe result:
+`BTCUSDT` 1m cache coverage starts after the requested 120-day window, so the
+engine reported one quality rejection. Until that data is backfilled, treat the
+result as a four-symbol covered experiment rather than a fully covered five-
+symbol study.
+
+Experiment metadata now stores requested and eligible symbols separately, and
+checkpoint paper suggestions use eligible symbols only.
+
+Stress checks did not rescue the decision: taker-fee/no-maker and `0.02%`
+fill-buffer stress variants stayed profitable in headline PnL, but their
+bootstrap positive-expectancy probabilities were still only about `83-84%`.
+That keeps the status at reject for promotion and no automatic paper config
+change.
+
+Leverage policy was tightened after the paper-real audit. Hinto's runtime
+ceiling is now `2x`, and API/UI/checkpoint application paths clamp higher
+values before they can reach paper or live execution. At `2x` on a `$100`
+paper wallet with `max-pos 3`, each full slot is roughly `$33` margin and
+about `$66` notional, while the `1%` risk cap still targets about `$1` account
+risk before fees/slippage.
+
+The 2x retest supports a narrow paper universe only:
+
+- `ETHUSDT, BNBUSDT, XRPUSDT`, 30 days, `bounce_daily2`: about `+6.4%`,
+  `22` trades, PF `1.89`, max drawdown about `3.6%`, still
+  `PAPER_ONLY_SMALL_SAMPLE`;
+- same narrow universe, 4 short walk-forward windows: `bounce_daily2` had
+  `4/4` positive windows but only `13` trades, so the stability label remains
+  `FRAGILE`;
+- 10-token no-DOGE universe at 2x: rejected across short walk-forward and
+  30-day checks; wider symbols added noise and worse drawdown.
+
+Current interpretation: `2x + ETH/BNB/XRP + bounce confirmation + daily
+symbol loss limit` is acceptable for paper observation, not live promotion.
+
+Follow-up strategy research added a stricter mean-reversion regime branch:
+`bounce_adx30`, which keeps the same bounce/daily-loss contract but blocks
+signals when ADX is above `30` instead of the production `40`.
+
+Summary of the latest checks:
+
+- worst 6-month ETH window: `bounce_adx30` improved `bounce_daily2` from about
+  `-3.3%` to about `+0.5%`, but only with `28` trades;
+- full 2-year ETH window: `bounce_adx30` improved PF from about `1.12` to
+  `1.27` and reduced drawdown from about `10.9%` to `7.6%`, but bootstrap
+  positive expectancy was still below the `90%` gate;
+- seven rolling 6-month ETH windows: `bounce_adx30` was positive in `5/7`
+  windows versus `3/7` for `bounce_daily2`, but both remain rejected because
+  at least one window is materially negative.
+
+The ADX threshold sweep rejected the nearby alternatives:
+
+- `bounce_adx25` was too strict and lost money in the worst 6-month window;
+- `bounce_adx35` increased the trade count, but weakened PF and walk-forward
+  stability versus ADX30;
+- ADX plus time shields cut sample size too far to trust.
+
+Scoreboards now report a selection-adjusted bootstrap probability. This is a
+conservative multiple-test haircut: if several related variants are tested in
+one matrix, the best-looking variant must still show a robust edge after the
+selection penalty. On the 2-year ETH rerun, `bounce_adx30` had `87.6%` raw
+bootstrap positive expectancy but only `62.8%` after the matrix haircut, so it
+remains below the promotion gate.
+
+Decision: `bounce_adx30` is a research candidate, not a Paper runtime update.
+Do not lower the production ADX threshold until it survives walk-forward gates
+and the runtime has an explicit, reviewed Paper setting for that threshold.
+
+## Monthly Return Target Check
+
+The `10%` monthly target was tested separately in
+`docs/MONTHLY_TARGET_RESEARCH_2026_05_11.md`.
+
+Result: not achieved.
+
+Key findings:
+
+- current Paper universe `ETH/BNB/XRP` with `bounce_daily2` averaged about
+  `+3.5%` per tested month after repairing 1m coverage;
+- adding `SOL` made `bounce_time_shield` stable across `6/6` monthly windows,
+  but average return was about `+3.4%`, with only `76` trades;
+- increasing `risk` from `1%` to `2%` did not change results because sizing was
+  margin-slot constrained at `2x`;
+- reducing `max-pos` concentrated capital and raised headline averages, but
+  introduced rejected months;
+- the current `trend_runner` positive-skew implementation was rejected across
+  the same monthly windows.
+
+Decision: keep the `10%` target as a research objective, not a Paper runtime
+claim. The next useful work is a real observe-only regime router plus a new
+trend-mode entry design, not another small threshold tweak.
+
 ## Research Tracks
 
 ### Track A: Mean-Reversion Scalper
@@ -38,6 +198,36 @@ Kill criteria:
 - more than 40% of profit comes from one symbol cluster or one market regime;
 - drawdown recovers only by increasing leverage or widening stops.
 
+Current paper experiment:
+
+```bash
+python backend/run_backtest.py \
+  --symbols ETHUSDT,BNBUSDT,XRPUSDT \
+  --days 120 --balance 100 --risk 0.01 --leverage 2 \
+  --max-pos 3 --no-compound --full-tp --maker-orders \
+  --bounce-confirm --daily-symbol-loss-limit 2
+```
+
+Current research candidate:
+
+```bash
+python backend/scripts/run_walk_forward.py \
+  --symbols ETHUSDT --balance 100 --risk 0.01 --leverage 2 \
+  --max-pos 3 --case bounce_daily2 --case bounce_adx30 \
+  --window 2024-05-11:2024-11-11 \
+  --window 2024-08-11:2025-02-11 \
+  --window 2024-11-11:2025-05-11 \
+  --window 2025-02-11:2025-08-11 \
+  --window 2025-05-11:2025-11-11 \
+  --window 2025-08-11:2026-02-11 \
+  --window 2025-11-11:2026-05-11
+```
+
+Keep the broad fixed universe as a benchmark, not the primary experiment. Do
+not add symbol-side quarantine or broad hour exclusions to production based on
+the current sample. They either reduced returns or looked like sample-specific
+curve fitting.
+
 ### Track B: Positive-Skew Trend Runner
 
 Purpose: test the opposite payoff shape: lose quickly when the setup fails,
@@ -56,6 +246,10 @@ Current implementation status:
 
 - `--strategy-id liquidity_reclaim_trend_runner` is available for research
   backtests.
+- `--strategy-id donchian_breakout_trend_runner` is available for research
+  backtests as a stricter channel-breakout family. It requires higher timeframe
+  alignment, a prior Donchian channel break, volume confirmation, a strong
+  candle body, close near the candle extreme, bounded ATR%, and a capped stop.
 - It rejects stops wider than `1.2%`, enters as a market-style continuation
   signal in the simulator, and sets the first target at `3R`.
 - It tags signals with `research_exit_profile=trend_runner_3r`, disabling early
@@ -69,10 +263,18 @@ Example:
 ```bash
 python backend/run_backtest.py \
   --strategy-id liquidity_reclaim_trend_runner \
-  --top 40 --days 30 --balance 50 --leverage 20 \
-  --max-pos 4 --no-compound --1m-monitoring --fill-buffer 0 \
+  --top 40 --days 30 --balance 100 --leverage 2 \
+  --max-pos 3 --no-compound --1m-monitoring --fill-buffer 0 \
   --max-sl-validation --max-sl-pct 1.2
 ```
+
+Latest result:
+
+- Strict Donchian v0 on the fixed 12-symbol Feb-May 2026 window was rejected:
+  `-12.44%`, PF `0.60`, `125` trades, and only `0.8%` bootstrap
+  positive-expectancy probability. The problem was not only win rate; stop-loss
+  exits overwhelmed the few runner exits. Do not promote this strategy id to
+  paper runtime.
 
 Promotion criteria:
 
@@ -86,6 +288,530 @@ Kill criteria:
 - positive results depend on one crash/trend window;
 - winners vanish after realistic exit slippage;
 - entry selectivity becomes so strict that sample size is not meaningful.
+
+### Track C: Regime Router
+
+Purpose: route the same pre-registered universe through conservative research
+presets instead of forcing a single strategy in every market condition.
+
+Current implementation status:
+
+- `--rolling-adaptive-router` now has a concrete
+  `src.application.analysis.adaptive_regime_router` module.
+- The rolling schedule no longer seeds symbols from start/mid/end rankings.
+  Daily ranking is constrained to the universe known before the test starts.
+- Router states can choose `shield`, guarded mean reversion, or guarded
+  short-only branches with symbol-side blocks.
+- Router exit profiles are research metadata only; they must not be consumed as
+  a live contract until explicitly promoted.
+
+Latest result:
+
+- Fixed 12-symbol rolling router v1 on Feb-May 2026 was rejected but informative:
+  `-0.18%`, PF `0.995`, `151` trades, max DD `5.71%`, and bootstrap
+  positive-expectancy probability `49.3%`.
+- A single stop-width sensitivity at `max_sl_pct=1.5` improved the same router
+  to `+0.33%`, PF `1.01`, and bootstrap positive-expectancy probability
+  `52.15%`, but it still failed promotion gates and the selection-adjusted
+  bootstrap was only `4.3%`.
+- The router reduced damage compared with raw breakout research, but it did not
+  create positive expectancy. It remains research-only.
+
+Next deterministic experiments:
+
+- split the same window into strict time-based out-of-sample checks;
+- run per-symbol robustness only as diagnostics, not as a promotion shortcut;
+- stress maker assumptions with taker-fee and worse-fill variants;
+- simplify filters before adding new parameters.
+
+### Track D: Momentum Pullback
+
+Purpose: test a trend-continuation family that does not buy raw breakouts.
+The setup first requires multi-horizon time-series momentum, then enters only
+when price pulls back and reclaims a short EMA with a capped ATR/swing stop.
+
+Current implementation status:
+
+- `--strategy-id adaptive_momentum_pullback` is available for research
+  backtests.
+- It uses 24-bar and 96-bar momentum, EMA fast/slow alignment, reclaim candle
+  body, volume ratio, swing invalidation, and a `2.4R` target.
+- It is positive-skew in contract shape, but the current exit distribution has
+  not yet produced true large-runner behavior.
+
+Latest result:
+
+- Feb-May 2026 fixed universe looked promising but still rejected:
+  `+3.16%`, PF `1.13`, `107` trades, DD `7.72%`, bootstrap positive
+  `70.15%`.
+- May 2025-May 2026 rejected the hypothesis:
+  `-10.76%`, PF `0.86`, `291` trades, DD `18.77%`, bootstrap positive
+  `12.1%`.
+- Long-only did not fix it:
+  `-9.66%`, PF `0.78`, `157` trades, DD `13.34%`.
+
+Decision: keep the implementation as a research family, but do not promote it
+to Paper. Recent-window performance is not enough; the one-year window shows
+the stop-out profile is still structurally weak.
+
+### Track E: Volatility Squeeze Breakout
+
+Purpose: test a volatility-compression family instead of another EMA threshold
+tweak. The setup waits for Bollinger bandwidth to contract versus its recent
+history, then requires expansion, trend alignment, volume confirmation, and a
+breakout through the prior structure high/low.
+
+Current implementation status:
+
+- `--strategy-id volatility_squeeze_breakout` is available for research
+  backtests.
+- The strategy computes only the recent bandwidth window required for squeeze
+  percentiles, avoiding the O(n^2) behavior found in the first implementation.
+- It requires a pre-breakout squeeze, current bandwidth expansion, EMA
+  alignment, volume ratio, 96-bar structure breakout, and strong candle close
+  location.
+- It is marked as a positive-skew research contract, but it is not a paper
+  runtime candidate.
+
+Latest result:
+
+- Raw squeeze breakout on the fixed 12-symbol Feb-May 2026 window was a clear
+  reject: `-22.43%`, `118` trades, win rate `23.73%`, max DD `26.90%`.
+- Adding the structure breakout gate cut damage materially but did not create
+  edge: `-2.88%`, `23` trades, win rate `34.78%`, max DD `4.40%`.
+- Adding ADX regime plus `1.5x` volume filter was the least bad variant:
+  checkpoint `f6eb74e494d8`, `21` trades, `-2.01%` audit return, PF `0.60`,
+  max DD `3.54%`, bootstrap positive-expectancy probability `14.35%`.
+
+Decision: `REJECT`. The idea is useful as a regime label, not as a standalone
+entry strategy. The MFE distribution showed no true runner behavior at 2x:
+zero trades reached `7%` ROE in the best filtered run. Do not promote
+`volatility_squeeze_breakout` to Paper.
+
+Next deterministic experiments:
+
+- use volatility squeeze as a router condition for the existing paper
+  mean-reversion family instead of entering breakout directly;
+- test breadth-confirmed expansion where at least several major symbols break
+  structure together before enabling trend continuation;
+- add Deflated-Sharpe or equivalent multiple-testing reporting before any
+  future parameter matrix is eligible for promotion.
+
+### Track F: Liquidity Sweep Reversal
+
+Purpose: test whether failed stop-run candles are safer to fade than to chase.
+The setup requires price to sweep a recent swing high/low, close back inside
+the prior range, show a clear wick rejection, stay near anchored VWAP, and keep
+ATR-based risk capped.
+
+Research basis considered:
+
+- Han, Kang, and Ryu's cryptocurrency momentum study warns that realistic
+  costs, daily price path, and liquidation risk can erase attractive crypto
+  momentum results; it also finds stronger time-series than cross-sectional
+  evidence, with losers prone to rebound:
+  https://ssrn.com/abstract=4675565
+- Osler's stop-loss order research supports the idea that clustered stop
+  orders can accelerate moves, while take-profit order clusters can reverse,
+  but it also cautions that the statistical tests do not prove causality:
+  https://www.sciencedirect.com/science/article/abs/pii/S0261560604001147
+- Bailey and Lopez de Prado's Deflated Sharpe work remains the gatekeeping
+  reference for selection bias and multiple-test overfitting:
+  https://www.davidhbailey.com/dhbpapers/deflated-sharpe.pdf
+
+Current implementation status:
+
+- `--strategy-id liquidity_sweep_reversal` is available for research
+  backtests.
+- It rejects weak sweeps by requiring wick ratio, close-location reclaim,
+  volume, VWAP distance, low long-horizon momentum, and max stop distance.
+- It is intentionally not wired to Paper runtime.
+
+Latest result:
+
+- First fixed-universe Feb-May 2026 run:
+  `42` trades, `-7.69%` audit return, win rate `38.10%`, max DD `7.69%`.
+- A stricter default reduced the damage but still failed:
+  checkpoint `93e1bf99979b`, `30` trades, `-6.32%` audit return, PF `0.29`,
+  max DD `6.32%`, bootstrap positive-expectancy probability `0.05%`.
+
+Decision: `REJECT`. The family contained pockets of symbol-specific wins
+(`BCHUSDT`, `SUIUSDT`) but failed the pre-registered universe and had no true
+positive-skew behavior at 2x: zero trades reached `7%` ROE. Do not promote
+`liquidity_sweep_reversal` to Paper.
+
+Next deterministic experiments:
+
+- stop adding candle-pattern-only strategies until portfolio-level regime and
+  symbol selection are tested as first-class, pre-registered hypotheses;
+- compare the current Paper mean-reversion candidate against an observe-only
+  breadth router, not another standalone entry rule;
+- add a formal multiple-test/Deflated-Sharpe trace before any future family can
+  be called a candidate.
+
+### Track G: Volatility-Managed Momentum
+
+Purpose: test whether momentum should be traded only when the symbol's short
+realized volatility is below its own longer baseline. This approximates the
+volatility-managed portfolio idea in the signal layer, because Hinto's current
+runtime does not yet support true volatility-targeted position sizing.
+
+Research basis considered:
+
+- Han/Kang/Ryu find that crypto time-series momentum can survive more realistic
+  assumptions better than cross-sectional momentum, but many attractive results
+  disappear after costs, intraday path, and liquidation risk:
+  https://ssrn.com/abstract=4675565
+- Moreira/Muir show the general idea of reducing exposure when volatility is
+  high can improve risk-adjusted performance in several factor portfolios:
+  https://www.nber.org/papers/w22208
+- Newer crypto trend-following work emphasizes adaptive portfolio construction
+  and regime-conditional testing, which matches Hinto's current failure mode:
+  https://arxiv.org/abs/2602.11708
+
+Current implementation status:
+
+- `--strategy-id volatility_managed_momentum` is available for research
+  backtests.
+- It requires EMA trend alignment, time-series momentum, EMA pullback reclaim,
+  anchored-VWAP agreement, volume confirmation, and short realized volatility
+  below a longer baseline.
+- It is a signal-gate approximation, not true volatility-targeted sizing.
+
+Latest result:
+
+- Fixed 12-symbol Feb-May 2026 long/short:
+  `83` trades, `-5.39%` audit return, win rate `43.37%`, max DD `10.87%`.
+- Long-only diagnostic:
+  checkpoint `2e06f458e1c8`, `46` trades, `-1.80%` audit return, PF `0.83`,
+  max DD `5.14%`, bootstrap positive-expectancy probability `26.8%`.
+
+Decision: `REJECT`. Long-only improved the damage materially, but still failed
+expectancy, PF, bootstrap, and sample-size gates. Do not promote
+`volatility_managed_momentum` to Paper.
+
+Next deterministic experiments:
+
+- implement a portfolio-level breadth/risk-on gate before more standalone
+  strategy families;
+- test volatility management as actual sizing only after backtest and Paper
+  execution can apply the same sizing contract;
+- keep long-only momentum as a diagnostic branch, not a runtime setting.
+
+### Track H: Portfolio Breadth Risk Gate
+
+Purpose: stop treating each symbol signal as isolated. The gate measures the
+current pre-registered universe and only allows LONG when enough symbols are in
+a bullish EMA-plus-momentum state, or SHORT when enough symbols are in a bearish
+state. This is intentionally a side filter around the existing execution model,
+not another standalone entry pattern.
+
+Research basis considered:
+
+- Market breadth research reports that breadth can add market-timing
+  information beyond simple trend/momentum signals:
+  https://www.sciencedirect.com/science/article/pii/S0264999319312982
+- Adaptive crypto trend-following work emphasizes portfolio construction,
+  rolling selection, asymmetric long/short allocation, and volatility-aware
+  exits rather than per-symbol threshold chasing:
+  https://arxiv.org/abs/2602.11708
+- Moreira/Muir remains the reference for reducing exposure when volatility or
+  broad risk is unfavorable, even though Hinto's current implementation is a
+  side gate rather than true volatility targeting:
+  https://www.nber.org/papers/w22208
+
+Current implementation status:
+
+- `--breadth-risk-gate` is available for research backtests.
+- The gate uses only the current low-timeframe histories already available in
+  the backtest loop; it does not look ahead.
+- It fails closed if too few symbols have enough history.
+- It reports separate LONG and SHORT block counts.
+- It is not wired to Paper runtime.
+
+Latest result:
+
+- Baseline fixed 12-symbol Feb-May 2026 mean-reversion run without breadth
+  gate: `127` trades, `+0.63%` audit return, PF `1.02`, max DD `9.11%`,
+  bootstrap positive-expectancy probability `55.9%`. Decision: `REJECT`.
+- Breadth gate with EMA `96`, momentum `24`, min symbols `9`, and side
+  threshold `0.60`: checkpoint `e3a2763b1d8a`, `33` trades, `+3.14%` audit
+  return, PF `1.67`, max DD `1.73%`, bootstrap positive-expectancy
+  probability `89.55%`.
+- Matrix scoreboard:
+  `backend/research_scoreboard_breadth_gate_3m_20260513.md`.
+- A 1-year OOS coverage check exposed the main weakness. With `min_symbols=9`,
+  the gate correctly failed closed because only `7` symbols passed the quality
+  filter at the older start date. With `min_symbols=6`, the same logic traded
+  but failed: checkpoint `7cc9a108313d`, `134` trades, `-6.28%` audit return,
+  PF `0.81`, max DD `13.89%`, bootstrap positive-expectancy probability
+  `12.15%`.
+
+Decision: `REJECT` for promotion. This is still the best portfolio-level
+improvement in the short Feb-May 2026 round, but the 1-year check shows it is
+not a durable edge yet. Keep the implementation as a research filter and
+diagnostic, not as Paper runtime.
+
+Next deterministic experiments:
+
+- run the same breadth gate on longer pre-registered windows and on a larger
+  fixed universe before changing Paper;
+- combine breadth with a true risk-budget/sizing contract only after Paper can
+  execute the same contract;
+- investigate whether `AVAXUSDT` and low-count loser symbols are structural
+  exclusions or merely sample noise, using pre-registered walk-forward splits.
+
+### Track I: OOS Risk-Guard Matrix
+
+Purpose: determine whether the 1-year failure can be fixed by more conservative
+risk guards before adding another entry algorithm.
+
+Research basis considered:
+
+- Crypto intraday studies show persistent time-of-day patterns in trading
+  activity, volatility, liquidity, and returns:
+  https://link.springer.com/article/10.1007/s11156-024-01304-1
+- Stop-loss-aware labeling research supports measuring whether a trade is
+  likely to hit stop-loss before target, rather than optimizing only direction:
+  https://www.sciencedirect.com/science/article/pii/S1544612323006578
+- Deflated-Sharpe / multiple-testing discipline remains the promotion gate:
+  https://www.davidhbailey.com/dhbpapers/deflated-sharpe.pdf
+
+Latest result:
+
+- No breadth gate 1-year baseline:
+  `516` trades, `-13.82%` audit return, PF `0.885`, max DD `22.29%`.
+- Breadth gate `min_symbols=6`:
+  `134` trades, `-6.28%`, PF `0.812`, max DD `13.89%`.
+- Aggressive one-loss quarantine:
+  `119` trades, `-6.38%`, PF `0.787`, max DD `14.03%`.
+- Daily loss size penalty `50%`:
+  `134` trades, `-6.72%`, PF `0.797`, max DD `14.32%`.
+- Max same direction `1`:
+  `88` trades, `-9.32%`, PF `0.629`, max DD `12.75%`.
+
+Decision: `REJECT`. Risk guards are useful for damage control, but they cannot
+turn a negative-expectancy entry into a robust strategy. The next new family
+should explicitly model stop-before-target probability or pre-register
+volatility/liquidity symbol selection before any backtest is run.
+
+### Track J: Stop-First Rule Audit
+
+Purpose: identify whether losses are structurally concentrated before adding
+another strategy family. This is a diagnostic layer, not a production filter:
+it asks whether blocking a simple category would have improved both halves of
+the sample after partial exits are aggregated back to trade level.
+
+Research basis considered:
+
+- crypto intraday studies report time-of-day effects in activity, volatility,
+  liquidity, and returns:
+  https://link.springer.com/article/10.1007/s11156-024-01304-1
+- stop-loss / take-profit systems can be studied as first-barrier problems,
+  which matches Hinto's stop-before-target failure mode:
+  https://www.sciencedirect.com/science/article/pii/S0305054804001194
+- Deflated-Sharpe style selection control is required before promoting any
+  blacklist, hour block, or symbol-selection rule:
+  https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2460551
+
+Current implementation status:
+
+- `backend/scripts/stop_first_rule_audit.py` is available for research logs.
+- `backend/scripts/run_symbol_quality_walk_forward.py` is available for
+  pre-registered train/test symbol selection checks.
+- It aggregates rows by `Trade ID`, so partial exits do not inflate trade
+  counts.
+- It evaluates `symbol`, `side`, `entry_hour`, `symbol_side`, and `side_hour`
+  blocking diagnostics.
+- It reports remaining return, PF, max drawdown, stop rate, and first-half /
+  second-half stability.
+- Generated `backend/stop_first_rule_audit_*.json` and `.md` artifacts are
+  local ignored outputs.
+
+Latest result:
+
+- 1-year breadth-gated OOS baseline:
+  `100` aggregated trades, `-6.28%`, PF `0.81`, max DD about `13.95%`.
+  Stable harmful groups included `LTCUSDT`, `AVAXUSDT`, `LONG`, and entry hour
+  `21:00`.
+- 3-month breadth-gated positive sample:
+  `23` aggregated trades, `+3.14%`, PF `1.67`, max DD about `1.73%`.
+  `AVAXUSDT` remained harmful, while `LTCUSDT` was protective in the shorter
+  window.
+- Excluding only `AVAXUSDT` in the 1-year breadth OOS run reduced loss to about
+  `-2.26%`, but still failed PF, drawdown, and bootstrap gates.
+- Excluding both `AVAXUSDT` and `LTCUSDT` produced a positive ceiling case
+  around `+3.37%`, but it still failed promotion gates with PF only `1.10`,
+  max DD around `11%`, and selection-adjusted bootstrap around `13.7%`.
+
+Decision: `REJECT` for Paper. The audit found useful suspects, especially
+`AVAXUSDT`, but hardcoding exclusions from the same data would be selection
+bias. The next eligible experiment must pre-register a symbol-quality rule
+before the test, then evaluate it on untouched windows.
+
+The first pre-registered symbol-quality walk-forward was also rejected. It used
+each prior 3-month window to score symbols by training-window PnL, excess
+stop-rate, and uncertainty penalty, filtered the ranked list to symbols that
+passed quality/coverage at the next test-window start, then tested the selected
+6-symbol set on the next 3-month window:
+
+- `2025-05-11` to `2025-08-11` trained selection, `2025-08-11` to
+  `2025-11-11` test: selected set improved the baseline but still failed,
+  about `-6.80%`, PF `0.40`, and bootstrap positive-expectancy probability
+  only about `0.2%`; baseline was about `-8.01%`.
+- `2025-08-11` to `2025-11-11` trained selection, `2025-11-11` to
+  `2026-02-11` test: selected set beat baseline, about `+3.59%`, PF `1.55`,
+  `36` trades, and bootstrap positive-expectancy probability about `88.6%`;
+  baseline was about `+1.08%`.
+- `2025-11-11` to `2026-02-11` trained selection, `2026-02-11` to
+  `2026-05-11` test: selected set stayed positive but underperformed baseline,
+  about `+1.76%`, PF `1.33`, `28` trades, and bootstrap positive-expectancy
+  probability about `79.2%`; baseline was about `+3.14%`, PF `1.67`.
+
+This is not an edge. It is a useful negative result: eligibility-aware
+trade-outcome selection reduced average damage, from about `-1.26%` baseline to
+about `-0.48%`, but it still had one severe negative OOS window and did not
+beat the baseline in the most recent test. Future symbol selection must start
+with coverage and liquidity eligibility, then add stop-before-target features.
+Do not use this walk-forward to alter Paper.
+
+Follow-up stop-first audits on those selected runs are useful for feature
+design but not for production rules:
+
+- the failed first selected window had stable damage in `SHORT`, `LTCUSDT`,
+  `21:00`, `02:00`, and `LTCUSDT:LONG`;
+- the second selected window was positive and showed `SUIUSDT:SHORT` plus
+  `LONG@22:00` as harmful, but `SHORT` overall was protective;
+- the third selected window was positive and showed `15:00` as harmful, while
+  `BNBUSDT`, `LONG`, `SUIUSDT`, and `05:00` were protective.
+
+This rejects a simple global side or hour blacklist. The same category can
+flip from harmful to protective across windows. Use these fields as model
+features for stop-before-target probability, not as manual blocks.
+
+Next deterministic experiments:
+
+- export stop-before-target labels for each candidate signal and measure
+  whether liquidity, realized volatility, spread proxy, breadth participation,
+  entry hour, and recent stop rate predict failure;
+- rank symbols using only data before each window, then test the ranking on
+  the next window without changing the rule;
+- keep Paper runtime unchanged until a pre-registered rule passes OOS,
+  fee/slippage stress, and selection-adjusted bootstrap gates.
+
+### Track K: go-trader-Inspired Strategy Family Cross-Check
+
+Purpose: learn from a mature open-source crypto bot without copying its code or
+letting an external design override Hinto's execution simulator. The reference
+repo (`https://github.com/richkuo/go-trader`) currently exposes useful
+architecture patterns:
+
+- separate open and close strategy registries;
+- explicit paper/live ownership and persisted state;
+- regime-gated entries where closes still run;
+- ATR-aware tiered exits and post-TP stop handling;
+- a backtest invariant that signals fill on the next bar and regime gates read
+  only prior-bar information.
+
+Those ideas mostly map to Hinto's existing research surface already:
+
+- `donchian_breakout_trend_runner` as the Donchian/breakout analogue;
+- `liquidity_sweep_reversal` as the liquidity sweep analogue;
+- `volatility_squeeze_breakout` as the squeeze/breakout analogue;
+- `adaptive_momentum_pullback` and `volatility_managed_momentum` as momentum
+  analogues;
+- `liquidity_sniper_mean_reversion` plus breadth gating as the current Hinto
+  benchmark.
+
+On 2026-05-14, a same-window, same-cost comparison was rerun on the fixed
+12-symbol research universe from `2026-02-11` to `2026-05-11`, `$100` capital,
+`2x` leverage, `1%` risk, realistic maker/taker fees, 1m monitoring,
+adversarial intrabar path, volume slippage, max-SL validation, BTC regime
+filter, and the same portfolio risk guards:
+
+- `liquidity_sniper_mean_reversion` with bounce plus breadth gate:
+  `33` trades, about `+3.14%` audit return, PF `1.67`, max DD `1.73%`. Checkpoint:
+  `checkpoint_20260514_154541_296925_5dc2ae7c1d06.json`. Decision:
+  `PAPER_ONLY_SMALL_SAMPLE`; no paper suggestion because research-only gates
+  are not yet fully representable in runtime settings.
+- `adaptive_momentum_pullback`: `107` trades, about `+3.16%` audit return,
+  PF `1.13`, max DD `7.72%`. Checkpoint:
+  `checkpoint_20260514_154541_650100_ebf32e1feca8.json`. Decision:
+  `REJECT`; bootstrap and selection-adjusted robustness were too weak.
+- `volatility_squeeze_breakout`: `23` trades, about `-2.87%`, PF `0.51`.
+- `volatility_managed_momentum`: `83` trades, about `-5.30%`, PF `0.74`.
+- `liquidity_sweep_reversal`: `30` trades, about `-6.32%`, PF `0.29`.
+- `donchian_breakout_trend_runner`: `121` trades, about `-13.32%`, PF `0.56`,
+  max DD `17.32%`.
+
+Scoreboard:
+`backend/research_scoreboard_go_trader_inspired_20260514.md`.
+
+Decision: do not switch Paper to a go-trader-inspired breakout or sweep family.
+The best positive result remains too small-sample, and the broader family test
+shows that breakout/sweep entries lose too often once realistic fees, slippage,
+and stop-first path assumptions are applied. The valuable lesson from
+go-trader is architectural: keep strategy composition explicit, regime gates
+entry-only, exits independent, and paper/live state auditable.
+
+Next deterministic experiments:
+
+- add a true pre-trade stop-before-target probability feature pack rather than
+  another raw breakout variant;
+- use session/time and liquidity features as model inputs, not manual blocks;
+- if a new router is added, pre-register the routing rule before testing and
+  compare it against both the mean-reversion benchmark and
+  `adaptive_momentum_pullback` on untouched windows.
+
+### Track L: Freqtrade Protection Cross-Check
+
+Purpose: learn from `https://github.com/freqtrade/freqtrade` without copying
+GPL-3 code into Hinto. The useful lessons are process-level:
+
+- run explicit lookahead and recursive-indicator checks before trusting a
+  strategy;
+- make protections opt-in for backtests so the operator can compare with and
+  without them;
+- separate pair-level protections from global protections;
+- record why a symbol was locked, not just that it was skipped.
+
+Hinto already had rough equivalents for `StoplossGuard`, daily symbol loss
+limits, direction blocks, and max drawdown. The missing low-risk idea was a
+`LowProfitPairs` analogue: lock a symbol when enough closed trades in a rolling
+lookback have total PnL below a threshold.
+
+Implementation status:
+
+- `CircuitBreaker` now supports research-only low-profit pair fields:
+  `low_profit_pair_trade_limit`, `low_profit_pair_lookback_hours`,
+  `low_profit_pair_cooldown_hours`, and `low_profit_pair_required_pnl`.
+- `run_backtest.py` exposes them as `--low-profit-pair-*` flags.
+- The guard blocks both long and short entries for that symbol, but only after
+  closed trades make the threshold observable.
+- `backend/tests/test_circuit_breaker_low_profit_pair.py` covers block,
+  expiry, and non-block behavior.
+
+Results:
+
+- Recent 3-month benchmark variants with `2` or `3` trade thresholds produced
+  the same `33` trades and about `+3.14%` audit return. The strictest variant
+  fired only `2` low-profit pair blocks and did not change outcome.
+- 1-year OOS breadth-gated benchmark with `2` trades / `168h` lookback /
+  `168h` cooldown fired `12` low-profit pair blocks but still failed:
+  checkpoint `checkpoint_20260514_164428_741816_1c6a3cc2bb51.json`,
+  `126` trades, about `-6.19%` audit return, PF `0.8039`, max DD `13.09%`,
+  bootstrap positive expectancy probability `13.05%`.
+
+Scoreboards:
+
+- `backend/research_scoreboard_freqtrade_lowprofit_20260514.md`
+- `backend/research_scoreboard_freqtrade_lowprofit_oos_1y_20260514.md`
+
+Decision: `REJECT` for Paper. This protection is architecturally clean and may
+help future strategy families, but it does not repair the current
+mean-reversion expectancy. Do not apply it to paper runtime. The more useful
+Freqtrade lesson is to add Hinto-native lookahead/recursive validation checks
+for every strategy family before running larger parameter searches.
 
 ## Broker Expansion Policy
 
@@ -124,6 +850,17 @@ Phase 3: Experiment discipline
 
 - Store every experiment with config hash, data window, symbols, fees, slippage,
   and code commit.
+- Avoid parallel output collisions; backtest artifacts now use microsecond run
+  stamps so trade logs, equity curves, and replay files remain tied together.
+- `run_backtest.py` writes local `experiment_*.json` metadata for each run;
+  these files are ignored by Git and should be copied into reports only when a
+  specific result is promoted for discussion.
+- `scripts/run_research_matrix.py` runs named strategy cases and records
+  elapsed time plus audit output. Use it for ablations and symbol-universe
+  comparisons before touching production defaults.
+- `scripts/checkpoint_research.py` creates local checkpoints from experiment
+  metadata. If the checkpoint decision is `REJECT`, paper runtime configuration
+  must not change.
 - Report R-multiple distribution, payoff skew, profit factor, max drawdown,
   regime contribution, and bootstrap/Monte Carlo robustness.
 - Reject experiments that improve PnL only by increasing leverage.

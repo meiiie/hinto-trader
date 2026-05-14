@@ -6,9 +6,9 @@ from src.application.services.signal_lifecycle_service import SignalLifecycleSer
 from src.infrastructure.persistence.sqlite_order_repository import SQLiteOrderRepository
 from src.infrastructure.persistence.sqlite_market_data_repository import SQLiteMarketDataRepository
 from src.infrastructure.repositories.sqlite_signal_repository import SQLiteSignalRepository
+from src.config.runtime import get_runtime_env, get_trading_db_path, get_trading_mode_label
 
 # SOTA: Import environment-aware settings
-import os
 import logging
 
 logger = logging.getLogger(__name__)
@@ -23,15 +23,14 @@ def _get_trading_db_path() -> str:
     """
     # Note: load_dotenv removed - config loaded centrally
 
-    env = os.getenv("ENV", "paper").lower().strip()
-    db_path = f"data/{env}/trading_system.db"
+    env = get_runtime_env()
+    db_path = get_trading_db_path(env)
 
     # Ensure directory exists
-    from pathlib import Path
-    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
 
     logger.info(f"[DB] Using path: {db_path} (ENV={env})")
-    return db_path
+    return str(db_path)
 
 
 # SOTA FIX: Replace @lru_cache with ENV-aware caching
@@ -42,7 +41,7 @@ _cached_instances: dict = {}
 def _get_current_env() -> str:
     """Get current environment (config already loaded by config_loader)."""
     # Note: load_dotenv removed - config loaded centrally
-    return os.getenv("ENV", "paper").lower().strip()
+    return get_runtime_env()
 
 
 @lru_cache()
@@ -167,7 +166,8 @@ def get_paper_trading_service() -> PaperTradingService:
         logger.info(f"📁 Creating PaperTradingService for {env}")
         _cached_instances[cache_key] = PaperTradingService(
             repository=repo,
-            market_data_repository=market_data_repo
+            market_data_repository=market_data_repo,
+            signal_lifecycle_service=get_signal_lifecycle_service()
         )
 
     return _cached_instances[cache_key]
@@ -222,14 +222,7 @@ def get_trading_mode() -> str:
     - ENV=testnet: Returns 'TESTNET' (Binance testnet)
     - ENV=paper: Returns 'PAPER' (local SQLite)
     """
-    env = os.getenv("ENV", "paper").lower()
-
-    if env == "live":
-        return "LIVE"
-    elif env == "testnet":
-        return "TESTNET"
-    else:
-        return "PAPER"
+    return get_trading_mode_label()
 
 
 from src.infrastructure.notifications.telegram_service import TelegramService

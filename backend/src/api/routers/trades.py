@@ -27,6 +27,12 @@ from src.api.dependencies import (
 from src.application.services.paper_trading_service import PaperTradingService
 from src.application.services.realtime_service import RealtimeService
 from src.application.services.signal_lifecycle_service import SignalLifecycleService
+from src.api.paper_order_enrichment import (
+    build_signal_cache,
+    calculate_distance_pct,
+    enrich_paper_order,
+    resolve_paper_order_current_price,
+)
 
 router = APIRouter(
     prefix="/trades",
@@ -361,6 +367,7 @@ async def get_portfolio(
                     # Release locked margin
                     paper_service._locked_in_orders -= order.margin
                     paper_service._locked_in_orders = max(0.0, paper_service._locked_in_orders)
+                    paper_service._mark_signal_expired(order.signal_id)
                     logger.info(f"⏰ [PORTFOLIO] TTL EXPIRED: {order.symbol} (age={age_seconds/60:.1f}min)")
 
         # Now get fresh data
@@ -375,9 +382,44 @@ async def get_portfolio(
     # SOTA FIX: Import datetime at proper scope for ttl_seconds calculation
     from datetime import datetime as dt_now
     from src.config import get_execution_mode, is_paper_real_enabled
+    from src.trading_contract import PRODUCTION_ORDER_TTL_MINUTES
 
     execution_mode = get_execution_mode("paper")
     paper_real = is_paper_real_enabled("paper")
+    signal_service = get_signal_lifecycle_service()
+    try:
+        signal_cache = await asyncio.to_thread(build_signal_cache, pending_orders, signal_service)
+    except Exception as e:
+        logger.warning(f"Failed to build paper order signal cache: {e}")
+        signal_cache = {}
+
+    def _get_paper_order_current_price(order):
+        return resolve_paper_order_current_price(order, paper_service.market_data_repo)
+
+    def _get_paper_order_distance_pct(order, current_price):
+        return calculate_distance_pct(order.entry_price, current_price)
+
+    def _format_paper_pending_order(order):
+        current_price = _get_paper_order_current_price(order)
+        return {
+            "id": order.id,
+            "signal_id": order.id[:8],
+            "symbol": order.symbol,
+            "side": order.side,
+            "entry_price": order.entry_price,
+            "size": order.quantity,
+            "margin": order.margin,
+            "leverage": order.leverage,
+            "stop_loss": order.stop_loss,
+            "take_profits": [order.take_profit] if order.take_profit else [],
+            "created_at": order.open_time.isoformat() if order.open_time else None,
+            "expires_at": None,
+            "ttl_seconds": max(0, PRODUCTION_ORDER_TTL_MINUTES * 60 - int((dt_now.now() - order.open_time).total_seconds())) if order.open_time else 0,
+            "is_live": False,
+            "current_price": current_price,
+            "distance_pct": _get_paper_order_distance_pct(order, current_price),
+            **enrich_paper_order(order, signal_cache)
+        }
 
     # Build response with enriched positions and pending orders
     response = {
@@ -387,25 +429,7 @@ async def get_portfolio(
         'realized_pnl': portfolio.realized_pnl,
         'open_positions_count': len(enriched_positions),
         'open_positions': enriched_positions,
-        'pending_orders': [
-            {
-                "id": order.id,
-                "signal_id": order.id[:8],
-                "symbol": order.symbol,
-                "side": order.side,
-                "entry_price": order.entry_price,
-                "size": order.quantity,
-                "margin": order.margin,
-                "leverage": order.leverage,
-                "stop_loss": order.stop_loss,
-                "take_profits": [order.take_profit] if order.take_profit else [],
-                "created_at": order.open_time.isoformat() if order.open_time else None,
-                "expires_at": None,
-                "ttl_seconds": max(0, 45*60 - int((dt_now.now() - order.open_time).total_seconds())) if order.open_time else 0,
-                "is_live": False
-            }
-            for order in pending_orders
-        ],
+        'pending_orders': [_format_paper_pending_order(order) for order in pending_orders],
         'trading_mode': 'PAPER',
         'is_live': False,
         'execution_mode': execution_mode,
@@ -417,8 +441,15 @@ async def get_portfolio(
 
     # SOTA: Add pending signals to PAPER portfolio
     try:
-        signal_service = get_signal_lifecycle_service()
         pending_signals = signal_service.get_pending_signals() if signal_service else []
+        active_signal_ids = {order.signal_id for order in pending_orders if order.signal_id}
+
+        if signal_service:
+            stale_signals = [s for s in pending_signals if s.id not in active_signal_ids]
+            for stale in stale_signals:
+                signal_service.mark_expired(stale.id)
+
+        pending_signals = [s for s in pending_signals if s.id in active_signal_ids]
         response['pending_signals'] = [
             {
                 'id': s.id,
@@ -572,26 +603,42 @@ async def get_pending_orders(
     # PAPER MODE
     import asyncio
     pending_orders = await asyncio.to_thread(paper_service.repo.get_pending_orders)
+    signal_service = get_signal_lifecycle_service()
+    try:
+        signal_cache = await asyncio.to_thread(build_signal_cache, pending_orders, signal_service)
+    except Exception as e:
+        logger.warning(f"Failed to build pending order signal cache: {e}")
+        signal_cache = {}
+
+    def _get_pending_current_price(order):
+        return resolve_paper_order_current_price(order, paper_service.market_data_repo)
+
+    def _get_pending_distance_pct(order, current_price):
+        return calculate_distance_pct(order.entry_price, current_price)
+
+    def _format_pending_order(order):
+        current_price = _get_pending_current_price(order)
+        return {
+            "id": order.id,
+            "symbol": order.symbol,
+            "side": order.side,
+            "status": order.status,
+            "entry_price": order.entry_price,
+            "quantity": order.quantity,
+            "margin": order.margin,
+            "stop_loss": order.stop_loss,
+            "take_profit": order.take_profit,
+            "open_time": order.open_time.isoformat() if order.open_time else None,
+            "size_usd": order.quantity * order.entry_price,
+            "is_live": False,
+            "current_price": current_price,
+            "distance_pct": _get_pending_distance_pct(order, current_price),
+            **enrich_paper_order(order, signal_cache)
+        }
 
     return {
         "count": len(pending_orders),
-        "orders": [
-            {
-                "id": order.id,
-                "symbol": order.symbol,
-                "side": order.side,
-                "status": order.status,
-                "entry_price": order.entry_price,
-                "quantity": order.quantity,
-                "margin": order.margin,
-                "stop_loss": order.stop_loss,
-                "take_profit": order.take_profit,
-                "open_time": order.open_time.isoformat() if order.open_time else None,
-                "size_usd": order.quantity * order.entry_price,
-                "is_live": False
-            }
-            for order in pending_orders
-        ],
+        "orders": [_format_pending_order(order) for order in pending_orders],
         "trading_mode": "PAPER"
     }
 

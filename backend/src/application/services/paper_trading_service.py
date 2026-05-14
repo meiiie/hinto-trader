@@ -11,13 +11,21 @@ from src.domain.repositories.i_order_repository import IOrderRepository
 # SOTA FIX: Import Market Repository for Price Oracle
 from src.infrastructure.persistence.sqlite_market_data_repository import SQLiteMarketDataRepository
 from src.trading_contract import (
+    PRODUCTION_AUTO_CLOSE_INTERVAL,
+    PRODUCTION_BLOCKED_WINDOWS_STR,
+    PRODUCTION_CB_MAX_CONSECUTIVE_LOSSES,
+    PRODUCTION_CB_MAX_DAILY_DRAWDOWN_PCT,
     PRODUCTION_CLOSE_PROFITABLE_AUTO,
     PRODUCTION_LEVERAGE,
+    PRODUCTION_LIMIT_CHASE_TIMEOUT_SECONDS,
     PRODUCTION_MAX_POSITIONS,
+    PRODUCTION_ORDER_TYPE,
     PRODUCTION_ORDER_TTL_MINUTES,
     PRODUCTION_PORTFOLIO_TARGET_PCT,
     PRODUCTION_PROFITABLE_THRESHOLD_PCT,
     PRODUCTION_RISK_PER_TRADE,
+    clamp_runtime_leverage,
+    parse_blocked_windows,
 )
 import logging
 
@@ -80,9 +88,15 @@ class PaperTradingService:
     FUNDING_RATE_PCT = 0.0001   # 0.01% per 8 hours (Binance default)
     FUNDING_INTERVAL_HOURS = 8
 
-    def __init__(self, repository: IOrderRepository, market_data_repository: Optional[SQLiteMarketDataRepository] = None):
+    def __init__(
+        self,
+        repository: IOrderRepository,
+        market_data_repository: Optional[SQLiteMarketDataRepository] = None,
+        signal_lifecycle_service=None,
+    ):
         self.repo = repository
         self.market_data_repo = market_data_repository
+        self.signal_lifecycle_service = signal_lifecycle_service
 
         # SOTA: Load from Settings (persisted in SQLite) instead of hardcoding.
         # Defaults mirror the documented production contract.
@@ -92,7 +106,7 @@ class PaperTradingService:
             self.RISK_PER_TRADE = float(
                 settings.get('risk_percent', PRODUCTION_RISK_PER_TRADE * 100)
             ) / 100
-            self.LEVERAGE = int(settings.get('leverage', PRODUCTION_LEVERAGE))
+            self.LEVERAGE = clamp_runtime_leverage(settings.get('leverage', PRODUCTION_LEVERAGE))
         except Exception:
             self.MAX_POSITIONS = PRODUCTION_MAX_POSITIONS
             self.RISK_PER_TRADE = PRODUCTION_RISK_PER_TRADE
@@ -116,6 +130,30 @@ class PaperTradingService:
         self.on_order_filled: Optional[Callable[[str], None]] = None
         # Called when a position is closed (SL/TP/LIQ/MANUAL)
         self.on_position_closed: Optional[Callable[[str, str], None]] = None
+
+    def _mark_signal_pending(self, signal_id: Optional[str]) -> None:
+        if not signal_id or not self.signal_lifecycle_service:
+            return
+        try:
+            self.signal_lifecycle_service.mark_pending(signal_id)
+        except Exception as e:
+            logger.warning(f"Failed to mark paper signal pending {signal_id}: {e}")
+
+    def _mark_signal_executed(self, signal_id: Optional[str], order_id: str) -> None:
+        if not signal_id or not self.signal_lifecycle_service:
+            return
+        try:
+            self.signal_lifecycle_service.mark_executed(signal_id, order_id)
+        except Exception as e:
+            logger.warning(f"Failed to mark paper signal executed {signal_id}: {e}")
+
+    def _mark_signal_expired(self, signal_id: Optional[str]) -> None:
+        if not signal_id or not self.signal_lifecycle_service:
+            return
+        try:
+            self.signal_lifecycle_service.mark_expired(signal_id)
+        except Exception as e:
+            logger.warning(f"Failed to mark paper signal expired {signal_id}: {e}")
 
     def get_wallet_balance(self) -> float:
         """Get Wallet Balance (Total Deposited + Realized PnL)"""
@@ -253,6 +291,35 @@ class PaperTradingService:
 
         return max(0.0, margin_balance - used_margin)
 
+    def _calculate_risk_capped_notional(
+        self,
+        wallet_balance: float,
+        allocated_capital: float,
+        entry_price: float,
+        stop_loss: float,
+    ) -> float:
+        """
+        Calculate order notional from slot allocation and account-risk cap.
+
+        Slot allocation caps margin usage. The risk cap makes risk_percent mean
+        the intended maximum loss at stop-loss, which is the safer paper behavior
+        for small accounts.
+        """
+        max_notional_by_margin = allocated_capital * self.LEVERAGE
+
+        if entry_price <= 0 or stop_loss <= 0 or self.RISK_PER_TRADE <= 0:
+            return max_notional_by_margin
+
+        stop_distance = abs(entry_price - stop_loss)
+        if stop_distance <= 0:
+            return max_notional_by_margin
+
+        stop_distance_pct = stop_distance / entry_price
+        risk_budget = wallet_balance * self.RISK_PER_TRADE
+        max_notional_by_risk = risk_budget / stop_distance_pct
+
+        return min(max_notional_by_margin, max_notional_by_risk)
+
     def on_signal_received(self, signal: TradingSignal, symbol: str = "BTCUSDT") -> None:
         """
         Handle new trading signal.
@@ -342,13 +409,19 @@ class PaperTradingService:
         # entry_price already computed above
         if entry_price <= 0: return
 
-        # Calculate notional and margin based on Pod allocation
-        position_size_usd = allocated_capital * self.LEVERAGE
-        margin_required = allocated_capital
+        stop_loss = signal.stop_loss if signal.stop_loss else 0.0
+
+        # Calculate notional with a real account-risk cap.
+        position_size_usd = self._calculate_risk_capped_notional(
+            wallet_balance=wallet_balance,
+            allocated_capital=allocated_capital,
+            entry_price=entry_price,
+            stop_loss=stop_loss,
+        )
+        margin_required = position_size_usd / self.LEVERAGE
 
         # Calculate quantity from notional
         quantity = position_size_usd / entry_price
-        stop_loss = signal.stop_loss if signal.stop_loss else 0.0
 
         # SOTA (Jan 2026): Validate min_notional (Match Backtest)
         MIN_NOTIONAL = 5.0  # $5 minimum (Binance standard)
@@ -358,6 +431,11 @@ class PaperTradingService:
 
         # 3. Create PENDING Position (Limit Order)
         tp1 = signal.tp_levels.get('tp1', 0.0) if signal.tp_levels else 0.0
+        risk = abs(entry_price - stop_loss) if stop_loss else 0.0
+        reward = abs(tp1 - entry_price) if tp1 else 0.0
+        risk_reward_ratio = signal.risk_reward_ratio
+        if risk_reward_ratio is None and risk > 0 and reward > 0:
+            risk_reward_ratio = reward / risk
 
         # Calculate Liquidation Price (Binance Isolated Margin Formula)
         # SOTA SYNC: Match Backtest formula with MMR (line 603-606)
@@ -381,10 +459,15 @@ class PaperTradingService:
             take_profit=tp1,
             open_time=datetime.now(),
             # SOTA (Jan 2026): Pass ATR for trailing stop (match Backtest)
-            atr=signal.indicators.get('atr', 0.0) if signal.indicators else 0.0
+            atr=signal.indicators.get('atr', 0.0) if signal.indicators else 0.0,
+            signal_id=signal.id,
+            confidence=signal.confidence,
+            confidence_level=signal.confidence_level.value,
+            risk_reward_ratio=risk_reward_ratio
         )
 
         self.repo.save_order(position)
+        self._mark_signal_pending(signal.id)
 
         # SOTA SYNC: Lock margin immediately (matches Backtest line 277)
         self._locked_in_orders += margin_required
@@ -407,7 +490,7 @@ class PaperTradingService:
 
         position.status = 'CLOSED'
         position.close_time = datetime.now()
-        position.realized_pnl = pnl
+        position.realized_pnl = (position.realized_pnl or 0.0) + pnl
         position.exit_reason = reason
 
         # Update DB
@@ -491,6 +574,7 @@ class PaperTradingService:
                 order.exit_reason = 'TTL_EXPIRED'
                 order.close_time = datetime.now()
                 self.repo.update_order(order)
+                self._mark_signal_expired(order.signal_id)
                 continue
 
             is_filled = False
@@ -528,6 +612,7 @@ class PaperTradingService:
                     parent_pos.entry_price = avg_entry
                     parent_pos.quantity = total_qty
                     parent_pos.margin = total_margin
+                    parent_pos.realized_pnl = (parent_pos.realized_pnl or 0.0) - entry_fee
 
                     # Recalculate Liquidation Price
                     if parent_pos.side == 'LONG':
@@ -542,6 +627,7 @@ class PaperTradingService:
                     order.exit_reason = 'MERGED'
                     order.close_time = datetime.now()
                     self.repo.update_order(order)
+                    self._mark_signal_executed(order.signal_id, order.id)
 
                     logger.info(f"🔗 MERGED {order.side} {order.symbol} | New Avg Entry: {avg_entry:.2f}")
 
@@ -551,7 +637,9 @@ class PaperTradingService:
                     order.open_time = datetime.now() # Update fill time
                     # Store initial quantity for partial TP
                     order.initial_quantity = order.quantity
+                    order.realized_pnl = (order.realized_pnl or 0.0) - entry_fee
                     self.repo.update_order(order)
+                    self._mark_signal_executed(order.signal_id, order.id)
                     logger.info(f"✅ FILLED {order.side} {order.symbol} @ {order.entry_price} (fee: ${entry_fee:.4f})")
 
                     # ISSUE-001 Fix: Notify state machine of order fill
@@ -675,17 +763,27 @@ class PaperTradingService:
                     else:
                         partial_pnl = (pos.entry_price - pos.take_profit) * close_qty
 
+                    partial_notional = pos.take_profit * close_qty
+                    partial_exit_fee = partial_notional * self.TAKER_FEE_PCT
+                    partial_pnl -= partial_exit_fee
+
                     # Update wallet balance with partial profit
                     current_balance = self.repo.get_account_balance()
                     self.repo.update_account_balance(current_balance + partial_pnl)
 
                     # Update position: reduce quantity, mark TP1 hit, move SL to breakeven
+                    pos.margin *= (1 - PARTIAL_TP_PCT)
                     pos.quantity = remaining_qty
                     pos.tp_hit_count = 1
+                    pos.realized_pnl = (pos.realized_pnl or 0.0) + partial_pnl
                     pos.stop_loss = pos.entry_price + (pos.entry_price * 0.0005 if pos.side == 'LONG' else -pos.entry_price * 0.0005)  # Small buffer
 
                     # Log partial close
-                    logger.info(f"🎯 PARTIAL TP1 (60%): {pos.symbol} @ {pos.take_profit:.4f} | PnL: ${partial_pnl:.2f} | Remaining: {remaining_qty:.4f}")
+                    logger.info(
+                        f"🎯 PARTIAL TP1 (60%): {pos.symbol} @ {pos.take_profit:.4f} | "
+                        f"PnL: ${partial_pnl:.2f} | Fee: ${partial_exit_fee:.4f} | "
+                        f"Remaining: {remaining_qty:.4f}"
+                    )
 
                     # Update DB
                     self.repo.update_order(pos)
@@ -793,29 +891,52 @@ class PaperTradingService:
     def get_settings(self) -> dict:
         """Get all trading settings"""
         settings = self.repo.get_all_settings()
+        blocked_windows_raw = settings.get("blocked_windows", PRODUCTION_BLOCKED_WINDOWS_STR)
+        try:
+            blocked_windows = parse_blocked_windows(blocked_windows_raw) if blocked_windows_raw else []
+        except ValueError:
+            blocked_windows = []
+
+        def as_bool(key: str, default: bool) -> bool:
+            raw = settings.get(key, "true" if default else "false")
+            return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
         # Return defaults aligned with the documented production contract.
         return {
             'risk_percent': float(settings.get('risk_percent', str(PRODUCTION_RISK_PER_TRADE * 100))),
             'max_positions': int(settings.get('max_positions', str(PRODUCTION_MAX_POSITIONS))),
-            'leverage': int(settings.get('leverage', str(PRODUCTION_LEVERAGE))),
-            'auto_execute': settings.get('auto_execute', 'false') == 'true',
+            'leverage': clamp_runtime_leverage(settings.get('leverage', PRODUCTION_LEVERAGE)),
+            'auto_execute': as_bool('auto_execute', False),
             'execution_ttl_minutes': int(
                 settings.get('execution_ttl_minutes', str(PRODUCTION_ORDER_TTL_MINUTES))
             ),
-            'smart_recycling': settings.get('smart_recycling', 'false') == 'true',      # Default False (TTL45 Standard)
+            'smart_recycling': as_bool('smart_recycling', False),      # Default False (TTL45 Standard)
             # SOTA (Jan 2026): Auto-Close Profitable Positions
-            'close_profitable_auto': settings.get(
-                'close_profitable_auto',
-                'true' if PRODUCTION_CLOSE_PROFITABLE_AUTO else 'false',
-            ) == 'true',
+            'close_profitable_auto': as_bool('close_profitable_auto', PRODUCTION_CLOSE_PROFITABLE_AUTO),
             'profitable_threshold_pct': float(
                 settings.get('profitable_threshold_pct', str(PRODUCTION_PROFITABLE_THRESHOLD_PCT))
             ),
+            'auto_close_interval': settings.get('auto_close_interval', PRODUCTION_AUTO_CLOSE_INTERVAL),
             # SOTA (Jan 2026): Portfolio Target
             'portfolio_target_pct': float(
                 settings.get('portfolio_target_pct', str(PRODUCTION_PORTFOLIO_TARGET_PCT))
-            )
+            ),
+            'max_consecutive_losses': int(
+                settings.get('max_consecutive_losses', str(PRODUCTION_CB_MAX_CONSECUTIVE_LOSSES))
+            ),
+            'cooldown_minutes': float(settings.get('cooldown_minutes', "0")),
+            'daily_symbol_loss_limit': int(settings.get('daily_symbol_loss_limit', "0")),
+            'blocked_windows': blocked_windows,
+            'blocked_windows_enabled': as_bool('blocked_windows_enabled', bool(blocked_windows)),
+            'blocked_windows_utc_offset': int(settings.get('blocked_windows_utc_offset', "7")),
+            'max_daily_drawdown_pct': float(
+                settings.get('max_daily_drawdown_pct', str(PRODUCTION_CB_MAX_DAILY_DRAWDOWN_PCT))
+            ),
+            'dz_force_close_enabled': as_bool('dz_force_close_enabled', False),
+            'order_type': settings.get('order_type', PRODUCTION_ORDER_TYPE),
+            'limit_chase_timeout_seconds': int(
+                settings.get('limit_chase_timeout_seconds', str(PRODUCTION_LIMIT_CHASE_TIMEOUT_SECONDS))
+            ),
             # NOTE: rr_ratio removed - backtest uses SL/TP from strategy signal
         }
 
@@ -833,11 +954,17 @@ class PaperTradingService:
         allowed_keys = [
             'risk_percent', 'max_positions', 'leverage', 'auto_execute',
             'execution_ttl_minutes', 'smart_recycling',
-            'close_profitable_auto', 'profitable_threshold_pct', 'portfolio_target_pct'
+            'close_profitable_auto', 'profitable_threshold_pct', 'auto_close_interval',
+            'portfolio_target_pct', 'max_consecutive_losses', 'cooldown_minutes',
+            'daily_symbol_loss_limit', 'blocked_windows', 'blocked_windows_enabled',
+            'blocked_windows_utc_offset', 'max_daily_drawdown_pct',
+            'dz_force_close_enabled', 'order_type', 'limit_chase_timeout_seconds'
         ]
 
         for key, value in settings.items():
             if key in allowed_keys:
+                if key == 'leverage':
+                    value = clamp_runtime_leverage(value)
                 # Convert bool to string for storage
                 if isinstance(value, bool):
                     value = 'true' if value else 'false'

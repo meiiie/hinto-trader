@@ -8,9 +8,9 @@ top-volume snapshots.
 import hashlib
 import json
 import logging
-import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
 from ..api.binance_rest_client import BinanceRestClient
@@ -26,7 +26,7 @@ class HistoricalVolumeService:
     to the current top50 symbols.
     """
 
-    CACHE_DIR = "data/cache/volume_rankings"
+    CACHE_DIR = Path(__file__).resolve().parents[3] / "data" / "cache" / "volume_rankings"
 
     def __init__(
         self,
@@ -39,7 +39,7 @@ class HistoricalVolumeService:
         self.client = BinanceRestClient(market_mode=market_mode)
 
         if self.cache_enabled:
-            os.makedirs(self.CACHE_DIR, exist_ok=True)
+            self.CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
     def get_top_symbols_at_date(
         self,
@@ -246,10 +246,10 @@ class HistoricalVolumeService:
         return volumes
 
     def _load_from_cache(self, cache_key: str) -> Optional[List[str]]:
-        cache_path = os.path.join(self.CACHE_DIR, f"{cache_key}.json")
-        if os.path.exists(cache_path):
+        cache_path = self.CACHE_DIR / f"{cache_key}.json"
+        if cache_path.exists():
             try:
-                with open(cache_path, "r", encoding="utf-8") as handle:
+                with cache_path.open("r", encoding="utf-8") as handle:
                     return json.load(handle)
             except Exception as exc:
                 self.logger.warning(f"Failed to load cache: {exc}")
@@ -257,9 +257,9 @@ class HistoricalVolumeService:
         return None
 
     def _save_to_cache(self, cache_key: str, symbols: List[str]) -> None:
-        cache_path = os.path.join(self.CACHE_DIR, f"{cache_key}.json")
+        cache_path = self.CACHE_DIR / f"{cache_key}.json"
         try:
-            with open(cache_path, "w", encoding="utf-8") as handle:
+            with cache_path.open("w", encoding="utf-8") as handle:
                 json.dump(symbols, handle)
             self.logger.info(f"Cached volume ranking: {cache_path}")
         except Exception as exc:
@@ -267,10 +267,10 @@ class HistoricalVolumeService:
 
     def clear_cache(self) -> int:
         count = 0
-        if os.path.exists(self.CACHE_DIR):
-            for file_name in os.listdir(self.CACHE_DIR):
-                if file_name.endswith(".json"):
-                    os.remove(os.path.join(self.CACHE_DIR, file_name))
+        if self.CACHE_DIR.exists():
+            for cache_file in self.CACHE_DIR.iterdir():
+                if cache_file.suffix == ".json":
+                    cache_file.unlink()
                     count += 1
         self.logger.info(f"Cleared {count} cached rankings")
         return count

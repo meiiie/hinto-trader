@@ -39,6 +39,8 @@ async def run_backtest(request: BacktestRequest):
             use_delta_divergence=request.use_delta_divergence,
             use_mtf_trend=request.use_mtf_trend,
             mtf_ema_period=request.mtf_ema_period,
+            use_adx_max_filter=request.use_adx_max_filter,
+            adx_max_threshold=request.adx_max_threshold,
         )
         loader = HistoricalDataLoader(market_mode=market_mode)
 

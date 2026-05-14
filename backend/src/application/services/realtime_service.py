@@ -219,6 +219,7 @@ class RealtimeService:
 
         # State
         self._is_running = False
+        self._rest_poll_last_closed: Dict[str, datetime] = {}
 
         # EventBus for broadcasting events (set via set_event_bus)
         self._event_bus = None
@@ -726,6 +727,69 @@ class RealtimeService:
             self.logger.info("✅ Hybrid fallback load complete")
         except Exception as e:
             self.logger.error(f"Hybrid fallback also failed: {e}")
+
+    async def poll_rest_market_data(self) -> Dict[str, int]:
+        """
+        Refresh runtime market data from Binance REST.
+
+        This is a paper-real fallback for environments where WebSocket streams
+        are blocked or stale. It keeps the same runtime path by feeding candles
+        through on_candle_update(), so paper fills, PnL, and 15m signal checks
+        still behave like the live stream path.
+        """
+        stats = {"updated_1m": 0, "closed_15m": 0, "closed_1h": 0}
+
+        try:
+            candles_1m = await self._load_candles_from_binance_async("1m", 2)
+            if candles_1m:
+                latest_1m = candles_1m[-1]
+                await self.on_candle_update(
+                    latest_1m,
+                    {
+                        "symbol": self.symbol,
+                        "interval": "1m",
+                        "is_closed": False,
+                        "source": "rest_poll",
+                    },
+                )
+                stats["updated_1m"] = 1
+
+            candles_15m = await self._load_candles_from_binance_async("15m", 2)
+            if len(candles_15m) >= 2:
+                closed_15m = candles_15m[-2]
+                if self._rest_poll_last_closed.get("15m") != closed_15m.timestamp:
+                    await self.on_candle_update(
+                        closed_15m,
+                        {
+                            "symbol": self.symbol,
+                            "interval": "15m",
+                            "is_closed": True,
+                            "source": "rest_poll",
+                        },
+                    )
+                    self._rest_poll_last_closed["15m"] = closed_15m.timestamp
+                    stats["closed_15m"] = 1
+
+            candles_1h = await self._load_candles_from_binance_async("1h", 2)
+            if len(candles_1h) >= 2:
+                closed_1h = candles_1h[-2]
+                if self._rest_poll_last_closed.get("1h") != closed_1h.timestamp:
+                    await self.on_candle_update(
+                        closed_1h,
+                        {
+                            "symbol": self.symbol,
+                            "interval": "1h",
+                            "is_closed": True,
+                            "source": "rest_poll",
+                        },
+                    )
+                    self._rest_poll_last_closed["1h"] = closed_1h.timestamp
+                    stats["closed_1h"] = 1
+
+        except Exception as e:
+            self.logger.warning(f"REST market poll failed for {self.symbol}: {e}")
+
+        return stats
 
     def _persist_candles_batch(self, candles: List[Candle], timeframe: str) -> None:
         """Persist a batch of candles to SQLite asynchronously."""

@@ -235,7 +235,7 @@ async def get_pending_orders():
             'notional': order['notional'],
             'margin_locked': order['locked_margin'],
             'ttl_remaining_minutes': ttl_remaining,
-            'confidence': order.get('confidence', 0),
+            'confidence': order.get('confidence'),
             'created_at': created_at.isoformat()
         })
 

@@ -10,6 +10,15 @@ from src.domain.entities.strategy_contract import (
     TREND_CONTINUATION_RUNNER,
     PayoffShape,
 )
+from src.trading_contract import (
+    PRODUCTION_ADX_MAX_THRESHOLD,
+    PRODUCTION_BLOCKED_WINDOWS_STR,
+    PRODUCTION_CLOSE_PROFITABLE_AUTO,
+    PRODUCTION_MAX_SL_PCT,
+    PRODUCTION_PORTFOLIO_TARGET_PCT,
+    PRODUCTION_PROFITABLE_THRESHOLD_PCT,
+    PRODUCTION_USE_ADX_MAX_FILTER,
+)
 
 
 def test_binance_futures_is_automation_ready_for_current_scalper():
@@ -47,3 +56,13 @@ def test_trend_runner_contract_is_positive_skew_track():
     assert TREND_CONTINUATION_RUNNER.payoff_shape == PayoffShape.POSITIVE_SKEW
     assert TREND_CONTINUATION_RUNNER.is_positive_skew_candidate is True
     assert MEAN_REVERSION_SCALPER.is_positive_skew_candidate is False
+
+
+def test_production_contract_keeps_paper_defaults_conservative():
+    assert PRODUCTION_CLOSE_PROFITABLE_AUTO is False
+    assert PRODUCTION_PROFITABLE_THRESHOLD_PCT >= 40.0
+    assert "03:00-05:00" in PRODUCTION_BLOCKED_WINDOWS_STR
+    assert PRODUCTION_USE_ADX_MAX_FILTER is True
+    assert PRODUCTION_ADX_MAX_THRESHOLD == 40.0
+    assert PRODUCTION_MAX_SL_PCT == 1.2
+    assert PRODUCTION_PORTFOLIO_TARGET_PCT == 10.0

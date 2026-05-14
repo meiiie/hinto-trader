@@ -54,15 +54,19 @@ from ..application.analysis.trend_filter import TrendFilter # SOTA: For HTF Conf
 from ..application.services.settings_provider import SettingsProvider  # SOTA: Centralized config
 from ..application.services.reconciliation_service import ReconciliationService  # SOTA: Exchange sync
 from .monitoring.profit_chart_generator import ProfitChartGenerator  # SOTA: Telegram profit charts
+from ..config.runtime import get_runtime_env, get_trading_db_path
 from ..trading_contract import (
+    PRODUCTION_ADX_MAX_THRESHOLD,
     PRODUCTION_MAX_SL_PCT,
     PRODUCTION_MTF_EMA_PERIOD,
     PRODUCTION_SNIPER_LOOKBACK,
     PRODUCTION_SNIPER_PROXIMITY,
+    PRODUCTION_USE_ADX_MAX_FILTER,
     PRODUCTION_USE_DELTA_DIVERGENCE,
     PRODUCTION_USE_MAX_SL_VALIDATION,
     PRODUCTION_USE_MTF_TREND,
     get_production_blocked_windows,
+    parse_blocked_windows,
 )
 
 
@@ -100,7 +104,7 @@ class DIContainer:
 
         # SOTA: Current environment from ENV variable
         # CRITICAL: .strip() to remove any trailing whitespace from ENV
-        self._env = os.getenv("ENV", "paper").lower().strip()
+        self._env = get_runtime_env()
         self._trading_db_path = self._get_env_db_path()
 
     @property
@@ -114,7 +118,7 @@ class DIContainer:
 
     def refresh_env(self):
         """Refresh environment from ENV variable (call after mode switch)."""
-        self._env = os.getenv("ENV", "paper").lower().strip()
+        self._env = get_runtime_env()
         self._trading_db_path = self._get_env_db_path()
         self.logger.info(f"🔄 DI Container refreshed for ENV={self._env}")
 
@@ -125,11 +129,7 @@ class DIContainer:
         SOTA: Database isolation per environment (paper/testnet/live).
         Uses absolute path to avoid working directory issues.
         """
-        from pathlib import Path
-
-        # Get backend directory (where di_container.py is located)
-        backend_dir = Path(__file__).parent.parent.parent
-        db_path = backend_dir / "data" / self._env / "trading_system.db"
+        db_path = get_trading_db_path(self._env)
 
         # Ensure directory exists
         db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -843,7 +843,8 @@ class DIContainer:
 
             self._instances['paper_trading_service'] = PaperTradingService(
                 repository=order_repository,
-                market_data_repository=market_data_repository
+                market_data_repository=market_data_repository,
+                signal_lifecycle_service=self.get_signal_lifecycle_service()
             )
             self.logger.info("Created PaperTradingService with order repository")
 
@@ -996,19 +997,13 @@ class DIContainer:
 
         key = f'order_repository_{env}'
         if key not in self._instances:
-            # Get environment-aware database path
-            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-            if env in ['testnet', 'live']:
-                db_path = os.path.join(base_dir, 'data', env, 'trading_system.db')
-            else:
-                db_path = os.path.join(base_dir, 'data', 'paper', 'trading_system.db')
+            db_path = get_trading_db_path(env)
 
             # Ensure directory exists
-            os.makedirs(os.path.dirname(db_path), exist_ok=True)
+            db_path.parent.mkdir(parents=True, exist_ok=True)
 
             self.logger.info(f"📁 Creating SQLiteOrderRepository for {env}: {db_path}")
-            self._instances[key] = SQLiteOrderRepository(db_path=db_path)
+            self._instances[key] = SQLiteOrderRepository(db_path=str(db_path))
 
         return self._instances[key]
 
@@ -1104,6 +1099,25 @@ class DIContainer:
         if 'circuit_breaker' not in self._instances:
             from ..application.risk_management.circuit_breaker import CircuitBreaker
 
+            settings = {}
+            try:
+                settings = self.get_order_repository().get_all_settings()
+            except Exception as exc:
+                self.logger.warning(f"Failed to load CircuitBreaker settings from DB: {exc}")
+
+            blocked_windows = get_production_blocked_windows()
+            if "blocked_windows" in settings:
+                raw_windows = str(settings.get("blocked_windows") or "")
+                try:
+                    blocked_windows = parse_blocked_windows(raw_windows) if raw_windows else []
+                except ValueError as exc:
+                    self.logger.warning(f"Invalid blocked_windows setting; using production defaults: {exc}")
+
+            def _as_bool(value, default: bool) -> bool:
+                if value is None:
+                    return default
+                return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
             # SOTA (Feb 9, 2026): Per-symbol CB + Trading Schedule ENABLED
             # LIVE data shows 50% WR (vs 78.5% backtest) due to revenge-trading on losing symbols.
             # Two new layers: (1) Per-symbol direction cooldown, (2) Dead zone time windows.
@@ -1115,8 +1129,8 @@ class DIContainer:
                 max_consecutive_losses=999,          # Effectively disabled (never triggers)
                 cooldown_hours=0.0,                  # No cooldown
                 max_daily_drawdown_pct=0.30,         # Global: halt at 30% DD — raised for $11 balance (25.9% MaxDD expected)
-                daily_symbol_loss_limit=0,           # DISABLED
-                blocked_windows=get_production_blocked_windows(),
+                daily_symbol_loss_limit=int(settings.get("daily_symbol_loss_limit", 0)),
+                blocked_windows=blocked_windows,
                 blocked_windows_utc_offset=7,       # UTC+7 (Vietnam timezone)
                 # F1: Escalating CB — DISABLED (blocks recovery trades)
                 use_escalating_cooldown=False,
@@ -1127,10 +1141,17 @@ class DIContainer:
                 direction_block_window_hours=2.0,
                 direction_block_cooldown_hours=4.0,
             )
+            self._instances['circuit_breaker'].max_daily_drawdown_pct = float(
+                settings.get("max_daily_drawdown_pct", 0.30)
+            )
+            self._instances['circuit_breaker'].blocked_windows_enabled = _as_bool(
+                settings.get("blocked_windows_enabled"),
+                len(blocked_windows) > 0,
+            )
             dz_str = ", ".join(f"{w['start']}-{w['end']}" for w in self._instances['circuit_breaker'].blocked_windows)
             self.logger.info(
-                f"Created CircuitBreaker: per-symbol=OFF, daily_limit=OFF, "
-                f"dead_zones=[{dz_str} UTC+7], global_dd=30%, "
+                f"Created CircuitBreaker: per-symbol=OFF, daily_limit={self._instances['circuit_breaker'].daily_symbol_loss_limit}, "
+                f"dead_zones=[{dz_str} UTC+7], global_dd={self._instances['circuit_breaker'].max_daily_drawdown_pct*100:.0f}%, "
                 f"escalating_cb=OFF, direction_block=OFF"
             )
 
@@ -1276,8 +1297,10 @@ class DIContainer:
                     use_delta_divergence=PRODUCTION_USE_DELTA_DIVERGENCE,
                     use_mtf_trend=PRODUCTION_USE_MTF_TREND,
                     mtf_ema_period=PRODUCTION_MTF_EMA_PERIOD,
-                    sniper_lookback=15,      # v6.5.1: LB15 (was 20) — +59% PnL, +3.5pp WR
-                    sniper_proximity=0.025,  # v6.5.1: P2.5 (was 2.0) — PF 1.92, MaxDD -8.5%
+                    use_adx_max_filter=PRODUCTION_USE_ADX_MAX_FILTER,
+                    adx_max_threshold=PRODUCTION_ADX_MAX_THRESHOLD,
+                    sniper_lookback=PRODUCTION_SNIPER_LOOKBACK,
+                    sniper_proximity=PRODUCTION_SNIPER_PROXIMITY,
                 ),
                 # SOTA FIX: Inject market data repository for candle persistence
                 market_data_repository=self.get_market_data_repository(),

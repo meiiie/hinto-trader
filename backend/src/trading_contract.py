@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Dict, List
 
-PRODUCTION_LEVERAGE = 20
+PRODUCTION_LEVERAGE = 2
+PRODUCTION_MAX_LEVERAGE = 2
 PRODUCTION_MAX_POSITIONS = 4
 PRODUCTION_ORDER_TTL_MINUTES = 50
 PRODUCTION_RISK_PER_TRADE = 0.01
@@ -14,9 +15,11 @@ PRODUCTION_SNIPER_PROXIMITY = 0.025
 PRODUCTION_USE_DELTA_DIVERGENCE = True
 PRODUCTION_USE_MTF_TREND = True
 PRODUCTION_MTF_EMA_PERIOD = 20
+PRODUCTION_USE_ADX_MAX_FILTER = True
+PRODUCTION_ADX_MAX_THRESHOLD = 40.0
 
-PRODUCTION_CLOSE_PROFITABLE_AUTO = True
-PRODUCTION_PROFITABLE_THRESHOLD_PCT = 20.0
+PRODUCTION_CLOSE_PROFITABLE_AUTO = False
+PRODUCTION_PROFITABLE_THRESHOLD_PCT = 40.0
 PRODUCTION_AUTO_CLOSE_INTERVAL = "1m"
 PRODUCTION_PORTFOLIO_TARGET_PCT = 10.0
 PRODUCTION_USE_MAX_SL_VALIDATION = True
@@ -36,10 +39,15 @@ PRODUCTION_CB_DAILY_SYMBOL_LOSS_LIMIT = 3
 PRODUCTION_CB_MAX_DAILY_DRAWDOWN_PCT = 0.30
 
 PRODUCTION_BLOCKED_WINDOWS_STR = (
-    "06:00-08:00,14:00-15:00,18:00-21:00,23:00-00:00"
+    "03:00-05:00,06:00-08:00,14:00-15:00,18:00-21:00,23:00-00:00"
 )
 
 _PRODUCTION_BLOCKED_WINDOWS: tuple[Dict[str, str], ...] = (
+    {
+        "start": "03:00",
+        "end": "05:00",
+        "reason": "Backtest risk window: repeated continuation stops in late US session",
+    },
     {
         "start": "06:00",
         "end": "08:00",
@@ -101,6 +109,15 @@ def get_production_blocked_windows() -> List[Dict[str, str]]:
 def get_production_symbol_blacklist() -> List[str]:
     """Return the production blacklist used by deploy/runtime safety layers."""
     return list(PRODUCTION_SYMBOL_BLACKLIST)
+
+
+def clamp_runtime_leverage(leverage: object) -> int:
+    """Clamp runtime leverage to Hinto's current paper/live safety ceiling."""
+    try:
+        parsed = int(float(leverage))
+    except (TypeError, ValueError):
+        parsed = PRODUCTION_LEVERAGE
+    return max(1, min(parsed, PRODUCTION_MAX_LEVERAGE))
 
 
 def parse_blocked_windows(blocked_windows: str) -> List[Dict[str, str]]:

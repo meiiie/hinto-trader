@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 from ...trading_contract import (
     PRODUCTION_AC_THRESHOLD_EXIT,
+    PRODUCTION_ADX_MAX_THRESHOLD,
     PRODUCTION_BLOCKED_WINDOWS_STR,
     PRODUCTION_CB_COOLDOWN_HOURS,
     PRODUCTION_CB_MAX_CONSECUTIVE_LOSSES,
@@ -13,6 +14,7 @@ from ...trading_contract import (
     PRODUCTION_HARD_CAP_PCT,
     PRODUCTION_LEVERAGE,
     PRODUCTION_MAX_POSITIONS,
+    PRODUCTION_MAX_LEVERAGE,
     PRODUCTION_MAX_SL_PCT,
     PRODUCTION_MTF_EMA_PERIOD,
     PRODUCTION_ORDER_TTL_MINUTES,
@@ -23,6 +25,7 @@ from ...trading_contract import (
     PRODUCTION_SNIPER_LOOKBACK,
     PRODUCTION_SNIPER_PROXIMITY,
     PRODUCTION_USE_1M_MONITORING,
+    PRODUCTION_USE_ADX_MAX_FILTER,
     PRODUCTION_USE_DELTA_DIVERGENCE,
     PRODUCTION_USE_MAX_SL_VALIDATION,
     PRODUCTION_USE_MTF_TREND,
@@ -55,7 +58,12 @@ class BacktestRequest(BaseModel):
         ge=1,
         description="Max concurrent positions (Shark Tank mode)",
     )
-    leverage: float = Field(PRODUCTION_LEVERAGE, description="Fixed leverage")
+    leverage: float = Field(
+        PRODUCTION_LEVERAGE,
+        gt=0,
+        le=PRODUCTION_MAX_LEVERAGE,
+        description=f"Fixed leverage, capped at {PRODUCTION_MAX_LEVERAGE}x for runtime parity",
+    )
     max_order_value: float = Field(50000.0, description="Liquidity cap")
     maintenance_margin_rate: float = Field(0.004, description="Maintenance margin rate")
     max_consecutive_losses: int = Field(
@@ -127,6 +135,15 @@ class BacktestRequest(BaseModel):
         PRODUCTION_MTF_EMA_PERIOD,
         ge=1,
         description="4h EMA period for MTF trend filter",
+    )
+    use_adx_max_filter: bool = Field(
+        PRODUCTION_USE_ADX_MAX_FILTER,
+        description="Block mean-reversion entries when ADX is too high",
+    )
+    adx_max_threshold: float = Field(
+        PRODUCTION_ADX_MAX_THRESHOLD,
+        gt=0.0,
+        description="ADX ceiling for mean-reversion entries",
     )
     sniper_lookback: int = Field(
         PRODUCTION_SNIPER_LOOKBACK,

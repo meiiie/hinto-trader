@@ -66,6 +66,11 @@ interface PendingOrder {
     open_time?: string;
     margin?: number;
     leverage?: number;
+    confidence?: number | null;
+    confidence_level?: 'high' | 'medium' | 'low' | null;
+    risk_reward_ratio?: number | null;
+    current_price?: number;
+    distance_pct?: number | null;
 }
 
 // SOTA: Pending Signal interface for real-time signal display
@@ -125,7 +130,7 @@ interface SharkTankStatus {
         phase?: string;
         is_breakeven?: boolean;
     }>;
-    pending_symbols: Array<{ symbol: string; side: string; entry_price: number; distance_pct: number; locked: boolean }>;
+    pending_symbols: Array<{ symbol: string; side: string; entry_price: number; distance_pct: number | null; locked: boolean; confidence?: number | null; rank?: number; risk_reward_ratio?: number | null }>;
 }
 
 // --- COLORS (Hinto Pro Style - Synced with Project) ---
@@ -839,6 +844,12 @@ const PendingOrderCard = ({ order, isExpanded, onToggle, onCancel }: { order: Pe
     const sl = order.stop_loss || 0;
     const tp1 = order.take_profit || (order.take_profits?.[0]) || 0;
     const tp2 = order.take_profits?.[1] || 0;
+    const confidenceText = typeof order.confidence === 'number'
+        ? `${Math.round(order.confidence * 100)}%`
+        : '--';
+    const rrText = typeof order.risk_reward_ratio === 'number'
+        ? `1:${order.risk_reward_ratio.toFixed(1)}`
+        : '--';
 
     return (
         <div style={{
@@ -910,6 +921,8 @@ const PendingOrderCard = ({ order, isExpanded, onToggle, onCancel }: { order: Pe
                         <div style={{ textAlign: 'center' }}><div style={{ color: COLORS.textTertiary, marginBottom: '2px' }}>Size</div><div style={{ color: COLORS.textPrimary, fontWeight: 600, fontFamily: 'monospace' }}>{sz.toFixed(4)}</div></div>
                         <div style={{ textAlign: 'center' }}><div style={{ color: COLORS.textTertiary, marginBottom: '2px' }}>Margin</div><div style={{ color: COLORS.textPrimary, fontWeight: 600, fontFamily: 'monospace' }}>${(order.margin || 0).toFixed(2)}</div></div>
                         <div style={{ textAlign: 'center' }}><div style={{ color: COLORS.textTertiary, marginBottom: '2px' }}>Leverage</div><div style={{ color: COLORS.textPrimary, fontWeight: 600 }}>{order.leverage || 1}x</div></div>
+                        <div style={{ textAlign: 'center' }}><div style={{ color: COLORS.textTertiary, marginBottom: '2px' }}>Confidence</div><div style={{ color: confidenceText === '--' ? COLORS.textTertiary : COLORS.yellow, fontWeight: 600, fontFamily: 'monospace' }}>{confidenceText}</div></div>
+                        <div style={{ textAlign: 'center' }}><div style={{ color: COLORS.textTertiary, marginBottom: '2px' }}>R:R</div><div style={{ color: rrText === '--' ? COLORS.textTertiary : COLORS.buy, fontWeight: 600, fontFamily: 'monospace' }}>{rrText}</div></div>
                     </div>
                 </div>
             )}

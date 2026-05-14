@@ -14,6 +14,13 @@ from typing import Optional, List
 import os
 import logging
 
+from src.config.runtime import (
+    get_execution_mode,
+    get_runtime_env,
+    is_exchange_ordering_enabled,
+    is_real_ordering_enabled,
+)
+from src.trading_contract import PRODUCTION_LEVERAGE, PRODUCTION_MAX_LEVERAGE
 from ...application.services.live_trading_service import (
     LiveTradingService,
     TradingMode,
@@ -21,6 +28,12 @@ from ...application.services.live_trading_service import (
 )
 from ...infrastructure.api.binance_futures_client import BinanceFuturesClient
 from ..dependencies import get_container
+from src.api.paper_order_enrichment import (
+    build_signal_cache,
+    calculate_distance_pct,
+    enrich_paper_order,
+    resolve_paper_order_current_price,
+)
 
 router = APIRouter(prefix="/live", tags=["Live Trading"])
 logger = logging.getLogger(__name__)
@@ -54,7 +67,12 @@ class StartTradingRequest(BaseModel):
     mode: str = Field("testnet", description="Trading mode: paper, testnet, live")
     risk_per_trade: float = Field(0.01, ge=0.001, le=0.05, description="Risk per trade (0.01 = 1%)")
     max_positions: int = Field(5, ge=1, le=10, description="Maximum concurrent positions")
-    max_leverage: int = Field(10, ge=1, le=20, description="Maximum leverage")
+    max_leverage: int = Field(
+        PRODUCTION_LEVERAGE,
+        ge=1,
+        le=PRODUCTION_MAX_LEVERAGE,
+        description=f"Maximum leverage (1-{PRODUCTION_MAX_LEVERAGE}x)",
+    )
     confirm_production: bool = Field(False, description="Must be true for live mode")
 
 
@@ -125,12 +143,27 @@ async def toggle_live_trading(enable: bool = Query(..., description="Enable or d
     SAFETY: Requires explicit enable=true to turn on.
     """
     service = _get_live_trading_service()
+    env = get_runtime_env()
+    exchange_ordering = is_exchange_ordering_enabled(env)
+    real_ordering = is_real_ordering_enabled(env)
 
     if enable:
+        if not exchange_ordering:
+            service.enable_trading = False
+            logger.info("Paper mode requested /live/toggle enable; exchange execution remains disabled")
+            return {
+                "success": True,
+                "enabled": False,
+                "mode": service.mode.value,
+                "execution_mode": get_execution_mode(env),
+                "exchange_ordering_enabled": False,
+                "real_ordering_enabled": False,
+                "message": "Paper mode uses the local simulator; exchange order submission stays disabled.",
+                "status": service.get_status()
+            }
+
         # Safety check — use ENV variable (not legacy BINANCE_USE_TESTNET)
-        env_mode = os.getenv("ENV", "paper").lower()
-        use_testnet = (env_mode == "testnet")
-        if not use_testnet and service.mode.value != "paper":
+        if real_ordering:
             # Extra warning for production
             logger.warning("🔴 PRODUCTION LIVE TRADING ENABLED!")
 
@@ -144,7 +177,9 @@ async def toggle_live_trading(enable: bool = Query(..., description="Enable or d
         "success": True,
         "enabled": service.enable_trading,
         "mode": service.mode.value,
-        "real_ordering_enabled": service.mode == TradingMode.LIVE,
+        "execution_mode": get_execution_mode(env),
+        "exchange_ordering_enabled": exchange_ordering,
+        "real_ordering_enabled": real_ordering,
         "status": service.get_status()
     }
 
@@ -153,13 +188,13 @@ async def toggle_live_trading(enable: bool = Query(..., description="Enable or d
 async def get_toggle_status():
     """Get whether live trading is currently enabled."""
     service = _get_live_trading_service()
-    from src.config import get_execution_mode, get_runtime_env, is_real_ordering_enabled
 
     env = get_runtime_env()
     return {
         "enabled": service.enable_trading,
         "mode": service.mode.value,
         "execution_mode": get_execution_mode(env),
+        "exchange_ordering_enabled": is_exchange_ordering_enabled(env),
         "real_ordering_enabled": is_real_ordering_enabled(env),
     }
 
@@ -368,13 +403,32 @@ async def get_shark_tank_status():
                 "quantity": pos.quantity if hasattr(pos, 'quantity') else (pos.size if hasattr(pos, 'size') else 0)
             })
 
-        for order in paper_service.repo.get_pending_orders():
+        pending_orders = paper_service.repo.get_pending_orders()
+        signal_cache = build_signal_cache(pending_orders, container.get_signal_lifecycle_service())
+        pending_with_metadata = [
+            (order, enrich_paper_order(order, signal_cache))
+            for order in pending_orders
+        ]
+        pending_with_metadata.sort(
+            key=lambda item: item[1].get("confidence") or 0,
+            reverse=True
+        )
+
+        for rank, (order, metadata) in enumerate(pending_with_metadata, start=1):
+            current_price = resolve_paper_order_current_price(order, paper_service.market_data_repo)
+            distance_pct = calculate_distance_pct(order.entry_price, current_price)
+
             pending_symbols.append({
                 "symbol": order.symbol.replace("USDT", ""),
                 "side": order.side,
                 "entry_price": order.entry_price,
-                "distance_pct": 0,  # Paper mode doesn't track real-time distance
-                "locked": False
+                "current_price": current_price,
+                "distance_pct": round(distance_pct, 2) if distance_pct is not None else None,
+                "locked": distance_pct is not None and distance_pct < 0.2,
+                "confidence": metadata.get("confidence"),
+                "confidence_level": metadata.get("confidence_level"),
+                "risk_reward_ratio": metadata.get("risk_reward_ratio"),
+                "rank": rank
             })
 
     return {
@@ -603,10 +657,28 @@ async def close_all_positions():
 
 @router.get("/balance", summary="Get account balance")
 async def get_balance():
-    """Get current account balance (direct from exchange)."""
+    """Get current account balance from the active execution venue."""
     try:
         # Use ENV variable (not legacy BINANCE_USE_TESTNET which defaults to testnet)
-        env_mode = os.getenv("ENV", "paper").lower()
+        env_mode = get_runtime_env()
+        if not is_exchange_ordering_enabled(env_mode):
+            container = get_container()
+            paper_service = container.get_paper_trading_service()
+            wallet = paper_service.get_wallet_balance()
+            return {
+                "usdt_available": wallet,
+                "all_assets": [
+                    {
+                        "asset": "USDT",
+                        "wallet_balance": wallet,
+                        "available_balance": paper_service.get_available_balance(0),
+                    }
+                ],
+                "execution_mode": get_execution_mode(env_mode),
+                "exchange_ordering_enabled": False,
+                "real_ordering_enabled": False,
+            }
+
         use_testnet = (env_mode == "testnet")
 
         # SOTA FIX: Run blocking API calls in thread pool to prevent event loop freeze

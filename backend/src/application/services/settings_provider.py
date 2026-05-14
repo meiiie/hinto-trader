@@ -16,6 +16,7 @@ from src.trading_contract import (
     PRODUCTION_ORDER_TTL_MINUTES,
     PRODUCTION_ORDER_TYPE,
     PRODUCTION_RISK_PER_TRADE,
+    clamp_runtime_leverage,
 )
 
 logger = logging.getLogger(__name__)
@@ -98,7 +99,7 @@ class SettingsProvider:
 
     def get_leverage(self) -> int:
         settings = self._get_all_settings()
-        return int(settings.get("leverage", self.DEFAULTS["leverage"]))
+        return clamp_runtime_leverage(settings.get("leverage", self.DEFAULTS["leverage"]))
 
     def get_max_positions(self) -> int:
         settings = self._get_all_settings()
@@ -184,6 +185,7 @@ class SettingsProvider:
         settings = self._get_all_settings()
         result = {**self.DEFAULTS}
         result.update(settings)
+        result["leverage"] = clamp_runtime_leverage(result.get("leverage"))
         return result
 
     def get_status_dict(self) -> Dict[str, Any]:

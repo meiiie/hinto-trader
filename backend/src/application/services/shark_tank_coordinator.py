@@ -97,9 +97,11 @@ class SharkTankCoordinator:
         self.metrics = {
             'batches_processed': 0,
             'batches_rejected_cooldown': 0,
+            'batches_deferred_cooldown': 0,
             'total_signals_processed': 0,
             'total_signals_rejected': 0
         }
+        self._cooldown_defer_until: Optional[datetime] = None
 
         # Callbacks
         self._execute_callback: Optional[Callable[[TradingSignal], None]] = None
@@ -242,7 +244,13 @@ class SharkTankCoordinator:
                     f"🦈 First signal received ({symbol}) for candle {candle_time.strftime('%H:%M:%S')}. "
                     f"Starting 2s batch timer..."
                 )
-                self._flush_task = asyncio.create_task(self._debounce_flush())
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    # Unit tests and synchronous scripts call force_process() manually.
+                    self._flush_task = None
+                else:
+                    self._flush_task = loop.create_task(self._debounce_flush())
 
             return True
 
@@ -328,12 +336,14 @@ class SharkTankCoordinator:
                 remaining = self.batch_cooldown_seconds - time_since_last
                 self.logger.info(
                     f"🚫 BATCH COOLDOWN: {time_since_last:.0f}s / {self.batch_cooldown_seconds}s. "
-                    f"Rejecting {len(self._pending_signals)} signals. "
+                    f"Deferring {len(self._pending_signals)} signals. "
                     f"Next batch in {remaining:.0f}s"
                 )
-                self.metrics['batches_rejected_cooldown'] += 1
-                self.metrics['total_signals_rejected'] += len(self._pending_signals)
-                self._pending_signals.clear()
+                defer_until = self._last_batch_processed_time + timedelta(seconds=self.batch_cooldown_seconds)
+                if self._cooldown_defer_until != defer_until:
+                    self.metrics['batches_rejected_cooldown'] += 1  # Legacy metric name.
+                    self.metrics['batches_deferred_cooldown'] += 1
+                    self._cooldown_defer_until = defer_until
                 return
 
         self._last_batch_time = datetime.now()
@@ -588,11 +598,8 @@ class SharkTankCoordinator:
             # Execute best
             if self._execute_callback:
                 try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        asyncio.create_task(self._execute_async(best_new.signal))
-                    else:
-                        self._execute_callback(best_new.signal)
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(self._execute_async(best_new.signal))
                 except RuntimeError:
                     self._execute_callback(best_new.signal)
 
@@ -633,11 +640,8 @@ class SharkTankCoordinator:
                     # SOTA: Fire and forget - don't block event loop
                     # Use asyncio.to_thread for sync callbacks
                     try:
-                        loop = asyncio.get_event_loop()
-                        if loop.is_running():
-                            asyncio.create_task(self._execute_async(batched.signal))
-                        else:
-                            self._execute_callback(batched.signal)
+                        loop = asyncio.get_running_loop()
+                        loop.create_task(self._execute_async(batched.signal))
                     except RuntimeError:
                         # No event loop - run synchronously
                         self._execute_callback(batched.signal)
@@ -650,6 +654,7 @@ class SharkTankCoordinator:
 
         # CRITICAL FIX (Jan 2026): Update last batch time and metrics
         self._last_batch_processed_time = now
+        self._cooldown_defer_until = None
         self.metrics['batches_processed'] += 1
         self.metrics['total_signals_processed'] += executed_count
 

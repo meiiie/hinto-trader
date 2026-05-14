@@ -9,18 +9,22 @@ import logging
 import asyncio
 from bisect import bisect_right
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional, Dict, Any, Set, Tuple
+from typing import TYPE_CHECKING, List, Optional, Dict, Any, Set, Tuple
 
 from ...domain.entities.candle import Candle
 from ...domain.entities.trading_signal import TradingSignal
 from ..signals.signal_generator import SignalGenerator
 from .execution_simulator import ExecutionSimulator
 from ...domain.interfaces.i_historical_data_loader import IHistoricalDataLoader
-from ..analysis.adaptive_regime_router import RollingRouterState
 from ..analysis.trend_filter import TrendFilter
 from ..risk_management.circuit_breaker import CircuitBreaker
 from ..services.signal_confirmation_service import SignalConfirmationService
 from .time_filter import TimeFilter
+
+if TYPE_CHECKING:
+    from ..analysis.adaptive_regime_router import RollingRouterState
+else:
+    RollingRouterState = Any
 
 
 class BacktestEngine:
@@ -49,6 +53,13 @@ class BacktestEngine:
         use_btc_impulse_filter: bool = False,
         btc_impulse_lookback_bars: int = 4,
         btc_impulse_threshold_pct: float = 0.5,
+        # Breadth risk gate (research): portfolio-level side filter.
+        use_breadth_risk_gate: bool = False,
+        breadth_ema_bars: int = 96,
+        breadth_momentum_bars: int = 24,
+        breadth_long_threshold: float = 0.55,
+        breadth_short_threshold: float = 0.55,
+        breadth_min_symbols: int = 6,
     ):
         self.signal_generator = signal_generator
         self.loader = loader
@@ -105,6 +116,14 @@ class BacktestEngine:
         self.btc_impulse_lookback_bars = max(1, int(btc_impulse_lookback_bars))
         self.btc_impulse_threshold_pct = float(btc_impulse_threshold_pct)
         self._btc_impulse_blocks = 0
+        self.use_breadth_risk_gate = use_breadth_risk_gate
+        self.breadth_ema_bars = max(2, int(breadth_ema_bars))
+        self.breadth_momentum_bars = max(1, int(breadth_momentum_bars))
+        self.breadth_long_threshold = float(breadth_long_threshold)
+        self.breadth_short_threshold = float(breadth_short_threshold)
+        self.breadth_min_symbols = max(1, int(breadth_min_symbols))
+        self._breadth_long_blocks = 0
+        self._breadth_short_blocks = 0
         self._quality_filter_rejections = 0
         self._termination_reason: Optional[str] = None
         self._terminated_early_at: Optional[datetime] = None
@@ -311,6 +330,12 @@ class BacktestEngine:
             if not symbols:
                 return {"error": "No eligible symbols after quality filter"}
 
+        if self.use_breadth_risk_gate and len(symbols) < self.breadth_min_symbols:
+            self._coverage_warnings.append(
+                "breadth_risk_gate_min_symbols_exceeds_eligible_universe: "
+                f"min={self.breadth_min_symbols}, eligible={len(symbols)}"
+            )
+
         # SOTA (Jan 2026): Load BTC candles for BTC filter
         if self.signal_generator.use_btc_filter:
             self.logger.info("📊 BTC FILTER: Loading BTC candles for trend detection...")
@@ -476,6 +501,9 @@ class BacktestEngine:
                 if active_router_state and active_router_state.preset == 'shield':
                     self._rolling_router_shield_blocks += 1
                     continue
+            breadth_state = None
+            if self.use_breadth_risk_gate:
+                breadth_state = self._calculate_breadth_state(symbol_histories_ltf, symbols)
             signals_batch = []
             for sym in symbols:
                 candle = current_ltf_map.get(sym)
@@ -549,6 +577,12 @@ class BacktestEngine:
                         ):
                             self._rolling_router_side_blocks += 1
                         self._research_symbol_side_blocks += 1
+                        continue
+                    if self._is_blocked_by_breadth(signal_side, breadth_state):
+                        if signal_side == "LONG":
+                            self._breadth_long_blocks += 1
+                        else:
+                            self._breadth_short_blocks += 1
                         continue
                     # SOTA: Apply daily loss size penalty (Freqtrade style)
                     if self.circuit_breaker:
@@ -771,6 +805,9 @@ class BacktestEngine:
             stats['btc_regime_blocks'] = self._btc_regime_blocks
         if self.use_btc_impulse_filter:
             stats['btc_impulse_blocks'] = self._btc_impulse_blocks
+        if self.use_breadth_risk_gate:
+            stats["breadth_long_blocks"] = self._breadth_long_blocks
+            stats["breadth_short_blocks"] = self._breadth_short_blocks
         if self._termination_reason:
             stats["termination_reason"] = self._termination_reason
             stats["terminated_early_at"] = self._terminated_early_at
@@ -824,6 +861,63 @@ class BacktestEngine:
                 return 'STRONG_BEAR'
             return 'BEAR'
         return 'NEUTRAL'
+
+    def _calculate_breadth_state(
+        self,
+        symbol_histories_ltf: Dict[str, List[Candle]],
+        symbols: List[str],
+    ) -> Dict[str, float]:
+        """Calculate current universe breadth without future data."""
+
+        min_required = max(self.breadth_ema_bars, self.breadth_momentum_bars) + 1
+        evaluated = 0
+        bullish = 0
+        bearish = 0
+
+        for symbol in symbols:
+            history = symbol_histories_ltf.get(symbol, [])
+            if len(history) < min_required:
+                continue
+            closes = [float(c.close) for c in history[-min_required:]]
+            current = closes[-1]
+            past = closes[-self.breadth_momentum_bars - 1]
+            if current <= 0 or past <= 0:
+                continue
+            ema_value = self._ema(closes, self.breadth_ema_bars)
+            momentum = (current - past) / past
+            evaluated += 1
+            if current > ema_value and momentum > 0:
+                bullish += 1
+            elif current < ema_value and momentum < 0:
+                bearish += 1
+
+        if evaluated <= 0:
+            return {
+                "evaluated": 0.0,
+                "bullish_ratio": 0.0,
+                "bearish_ratio": 0.0,
+            }
+
+        return {
+            "evaluated": float(evaluated),
+            "bullish_ratio": bullish / evaluated,
+            "bearish_ratio": bearish / evaluated,
+        }
+
+    def _is_blocked_by_breadth(
+        self,
+        signal_side: str,
+        breadth_state: Optional[Dict[str, float]],
+    ) -> bool:
+        if not self.use_breadth_risk_gate:
+            return False
+        if not breadth_state or breadth_state.get("evaluated", 0.0) < self.breadth_min_symbols:
+            return True
+        if signal_side == "LONG":
+            return breadth_state["bullish_ratio"] < self.breadth_long_threshold
+        if signal_side == "SHORT":
+            return breadth_state["bearish_ratio"] < self.breadth_short_threshold
+        return False
 
     def _calculate_btc_impulse_pct(self, btc_candles: List[Candle]) -> float:
         """Return BTC LTF impulse over the configured lookback window."""

@@ -8,7 +8,7 @@ import os
 import pytest
 from pathlib import Path
 from unittest.mock import patch, mock_open
-from src.config import Config
+from src.config import Config, MultiTokenConfig
 
 
 @pytest.fixture(autouse=True)
@@ -203,6 +203,26 @@ class TestConfig:
         # This should fail validation
         with pytest.raises(ValueError):
             config.validate()
+
+    def test_multitoken_loads_custom_symbols_from_enabled_tokens(self, tmp_path):
+        """Older DBs may store custom symbols only in enabled_tokens."""
+        import sqlite3
+
+        db_path = tmp_path / "trading_system.db"
+        with sqlite3.connect(db_path) as conn:
+            conn.execute("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT)")
+            conn.execute(
+                "INSERT INTO settings (key, value) VALUES (?, ?)",
+                ("enabled_tokens", "BTCUSDT,1000BONKUSDT,PUMPUSDT"),
+            )
+
+        multi_token = MultiTokenConfig(db_path_override=str(db_path))
+
+        assert set(multi_token.symbols) == {
+            "BTCUSDT",
+            "1000BONKUSDT",
+            "PUMPUSDT",
+        }
 
 
 # Pytest fixtures

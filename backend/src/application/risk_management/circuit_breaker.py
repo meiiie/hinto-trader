@@ -27,6 +27,10 @@ class CircuitBreaker:
         symbol_side_loss_limit: int = 0,
         symbol_side_loss_window_hours: float = 72.0,
         symbol_side_cooldown_hours: float = 72.0,
+        low_profit_pair_trade_limit: int = 0,
+        low_profit_pair_lookback_hours: float = 24.0,
+        low_profit_pair_cooldown_hours: float = 24.0,
+        low_profit_pair_required_pnl: float = 0.0,
         # SOTA (Feb 9, 2026): Trading Schedule
         blocked_windows: Optional[List[Dict[str, str]]] = None,
         blocked_windows_utc_offset: int = 7,
@@ -55,6 +59,12 @@ class CircuitBreaker:
         self.symbol_side_loss_window_hours = symbol_side_loss_window_hours
         self.symbol_side_cooldown_hours = symbol_side_cooldown_hours
         self._symbol_side_losses: Dict[str, Dict[str, List[datetime]]] = {}
+        self.low_profit_pair_trade_limit = low_profit_pair_trade_limit
+        self.low_profit_pair_lookback_hours = low_profit_pair_lookback_hours
+        self.low_profit_pair_cooldown_hours = low_profit_pair_cooldown_hours
+        self.low_profit_pair_required_pnl = low_profit_pair_required_pnl
+        self._symbol_trade_results: Dict[str, List[Tuple[datetime, float]]] = {}
+        self._low_profit_pair_blocked_until: Dict[str, datetime] = {}
 
         # Global Portfolio State
         self.daily_start_balance: float = 0.0
@@ -98,6 +108,7 @@ class CircuitBreaker:
         self._escalating_cb_triggers: int = 0
         self._blocked_by_direction: int = 0
         self._blocked_by_symbol_side_window: int = 0
+        self._blocked_by_low_profit_pair: int = 0
 
         self.logger = logging.getLogger(__name__)
 
@@ -131,6 +142,38 @@ class CircuitBreaker:
             self.logger.warning(
                 f"SYMBOL-SIDE QUARANTINE: {symbol} {side} hit {len(loss_times)} losses "
                 f"in {self.symbol_side_loss_window_hours:.1f}h, blocked until "
+                f"{unblock_time.strftime('%Y-%m-%d %H:%M:%S')} UTC"
+            )
+
+    def _record_low_profit_pair(self, symbol: str, pnl_usd: float, current_time: datetime) -> None:
+        if self.low_profit_pair_trade_limit <= 0:
+            return
+
+        cutoff = current_time - timedelta(hours=self.low_profit_pair_lookback_hours)
+        results = [
+            (ts, pnl)
+            for ts, pnl in self._symbol_trade_results.get(symbol, [])
+            if ts >= cutoff
+        ]
+        results.append((current_time, pnl_usd))
+        self._symbol_trade_results[symbol] = results
+
+        if len(results) < self.low_profit_pair_trade_limit:
+            return
+
+        window_pnl = sum(pnl for _, pnl in results)
+        if window_pnl >= self.low_profit_pair_required_pnl:
+            return
+
+        unblock_time = current_time + timedelta(hours=self.low_profit_pair_cooldown_hours)
+        current_block = self._low_profit_pair_blocked_until.get(symbol)
+        if current_block is None or unblock_time > current_block:
+            self._low_profit_pair_blocked_until[symbol] = unblock_time
+            self._blocked_by_low_profit_pair += 1
+            self.logger.warning(
+                f"LOW PROFIT PAIR: {symbol} total PnL ${window_pnl:.2f} "
+                f"over {len(results)} trades/{self.low_profit_pair_lookback_hours:.1f}h "
+                f"< ${self.low_profit_pair_required_pnl:.2f}; blocked until "
                 f"{unblock_time.strftime('%Y-%m-%d %H:%M:%S')} UTC"
             )
 
@@ -187,6 +230,22 @@ class CircuitBreaker:
         if 'symbol_side_cooldown_hours' in kwargs:
             self.symbol_side_cooldown_hours = float(kwargs['symbol_side_cooldown_hours'])
             self.logger.info(f"CB: symbol_side_cooldown_hours = {self.symbol_side_cooldown_hours}")
+
+        if 'low_profit_pair_trade_limit' in kwargs:
+            self.low_profit_pair_trade_limit = int(kwargs['low_profit_pair_trade_limit'])
+            self.logger.info(f"CB: low_profit_pair_trade_limit = {self.low_profit_pair_trade_limit}")
+
+        if 'low_profit_pair_lookback_hours' in kwargs:
+            self.low_profit_pair_lookback_hours = float(kwargs['low_profit_pair_lookback_hours'])
+            self.logger.info(f"CB: low_profit_pair_lookback_hours = {self.low_profit_pair_lookback_hours}")
+
+        if 'low_profit_pair_cooldown_hours' in kwargs:
+            self.low_profit_pair_cooldown_hours = float(kwargs['low_profit_pair_cooldown_hours'])
+            self.logger.info(f"CB: low_profit_pair_cooldown_hours = {self.low_profit_pair_cooldown_hours}")
+
+        if 'low_profit_pair_required_pnl' in kwargs:
+            self.low_profit_pair_required_pnl = float(kwargs['low_profit_pair_required_pnl'])
+            self.logger.info(f"CB: low_profit_pair_required_pnl = {self.low_profit_pair_required_pnl}")
 
         if 'blocked_windows' in kwargs:
             raw = kwargs['blocked_windows']
@@ -302,6 +361,8 @@ class CircuitBreaker:
         """SOTA method with time context — records per-direction consecutive + daily losses."""
         state = self._get_state(symbol)[side]
 
+        self._record_low_profit_pair(symbol, pnl_usd, current_time)
+
         if pnl_usd > 0:
             state['losses'] = 0
             state['blocked_until'] = None
@@ -393,7 +454,12 @@ class CircuitBreaker:
             if dir_blocked and current_time < dir_blocked:
                 return True
 
-        # 3. Symbol + Direction Block (consecutive losses OR daily limit)
+        # 3. Symbol-level low-profit protection
+        pair_blocked_until = self._low_profit_pair_blocked_until.get(symbol)
+        if pair_blocked_until and current_time < pair_blocked_until:
+            return True
+
+        # 4. Symbol + Direction Block (consecutive losses OR daily limit)
         state = self._get_state(symbol).get(side)
         if not state:
             return False
@@ -416,6 +482,20 @@ class CircuitBreaker:
             dir_blocked = self._direction_blocked_until.get(side)
             if dir_blocked and current_time < dir_blocked:
                 return f"Direction block: too many {side} losses across symbols, until {dir_blocked.strftime('%H:%M')}"
+
+        pair_blocked_until = self._low_profit_pair_blocked_until.get(symbol)
+        if pair_blocked_until and current_time < pair_blocked_until:
+            cutoff = current_time - timedelta(hours=self.low_profit_pair_lookback_hours)
+            results = [
+                pnl for ts, pnl in self._symbol_trade_results.get(symbol, [])
+                if ts >= cutoff
+            ]
+            window_pnl = sum(results)
+            return (
+                f"Low-profit pair ({len(results)}/{self.low_profit_pair_trade_limit} trades, "
+                f"PnL ${window_pnl:.2f} < ${self.low_profit_pair_required_pnl:.2f}), "
+                f"blocked until {pair_blocked_until.strftime('%H:%M')}"
+            )
 
         state = self._get_state(symbol).get(side)
         if state and state.get('blocked_until') and current_time < state['blocked_until']:
@@ -490,6 +570,10 @@ class CircuitBreaker:
                 'symbol_side_loss_limit': self.symbol_side_loss_limit,
                 'symbol_side_loss_window_hours': self.symbol_side_loss_window_hours,
                 'symbol_side_cooldown_hours': self.symbol_side_cooldown_hours,
+                'low_profit_pair_trade_limit': self.low_profit_pair_trade_limit,
+                'low_profit_pair_lookback_hours': self.low_profit_pair_lookback_hours,
+                'low_profit_pair_cooldown_hours': self.low_profit_pair_cooldown_hours,
+                'low_profit_pair_required_pnl': self.low_profit_pair_required_pnl,
                 'max_daily_drawdown_pct': self.max_daily_drawdown_pct,
                 'blocked_windows': self.blocked_windows,
                 'blocked_windows_enabled': self.blocked_windows_enabled,
@@ -503,6 +587,11 @@ class CircuitBreaker:
                     sym: {str(d): c for d, c in dates.items()}
                     for sym, dates in self._daily_losses.items()
                 },
+                'low_profit_pair_blocks': {
+                    sym: until.isoformat()
+                    for sym, until in self._low_profit_pair_blocked_until.items()
+                    if current_time < until
+                },
             },
             'metrics': {
                 'blocked_by_schedule': self._blocked_by_schedule,
@@ -511,5 +600,6 @@ class CircuitBreaker:
                 'escalating_cb_triggers': self._escalating_cb_triggers,
                 'blocked_by_direction': self._blocked_by_direction,
                 'blocked_by_symbol_side_window': self._blocked_by_symbol_side_window,
+                'blocked_by_low_profit_pair': self._blocked_by_low_profit_pair,
             },
         }

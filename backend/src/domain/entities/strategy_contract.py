@@ -94,3 +94,83 @@ TREND_CONTINUATION_RUNNER = StrategyContract(
         "optimize for R-multiple distribution, not headline win rate",
     ),
 )
+
+
+DONCHIAN_BREAKOUT_RUNNER = StrategyContract(
+    strategy_id="donchian_breakout_trend_runner",
+    family=StrategyFamily.TREND_CONTINUATION,
+    payoff_shape=PayoffShape.POSITIVE_SKEW,
+    min_reward_to_risk=2.0,
+    max_loss_r=1.0,
+    requires_short_selling=True,
+    requires_leverage=False,
+    validation_notes=(
+        "research track: enter confirmed channel breakouts with ATR-based risk",
+        "must be tested on pre-registered universes and multiple regimes",
+        "designed for low win rate / larger winner distributions",
+    ),
+)
+
+
+MOMENTUM_PULLBACK_RUNNER = StrategyContract(
+    strategy_id="adaptive_momentum_pullback",
+    family=StrategyFamily.TREND_CONTINUATION,
+    payoff_shape=PayoffShape.POSITIVE_SKEW,
+    min_reward_to_risk=1.8,
+    max_loss_r=1.0,
+    requires_short_selling=True,
+    requires_leverage=False,
+    validation_notes=(
+        "research track: time-series momentum with pullback/reclaim entry",
+        "avoid raw breakout chasing; require multi-horizon trend first",
+        "must survive fixed-universe and out-of-sample tests before paper use",
+    ),
+)
+
+
+VOLATILITY_SQUEEZE_RUNNER = StrategyContract(
+    strategy_id="volatility_squeeze_breakout",
+    family=StrategyFamily.TREND_CONTINUATION,
+    payoff_shape=PayoffShape.POSITIVE_SKEW,
+    min_reward_to_risk=2.0,
+    max_loss_r=1.0,
+    requires_short_selling=True,
+    requires_leverage=False,
+    validation_notes=(
+        "research track: volatility compression followed by trend-aligned expansion",
+        "do not promote unless fixed-universe multi-window tests survive",
+        "designed to reduce whipsaws by requiring squeeze, expansion, trend, and volume",
+    ),
+)
+
+
+LIQUIDITY_SWEEP_REVERSAL = StrategyContract(
+    strategy_id="liquidity_sweep_reversal",
+    family=StrategyFamily.MEAN_REVERSION_SCALP,
+    payoff_shape=PayoffShape.POSITIVE_SKEW,
+    min_reward_to_risk=1.4,
+    max_loss_r=1.0,
+    requires_short_selling=True,
+    requires_leverage=False,
+    validation_notes=(
+        "research track: fade failed stop-run candles after swing sweep and reclaim",
+        "avoid raw breakout chasing; require wick rejection, VWAP distance, and capped risk",
+        "must be rejected unless fixed-universe tests survive fees, slippage, and bootstrap gates",
+    ),
+)
+
+
+VOLATILITY_MANAGED_MOMENTUM = StrategyContract(
+    strategy_id="volatility_managed_momentum",
+    family=StrategyFamily.TREND_CONTINUATION,
+    payoff_shape=PayoffShape.POSITIVE_SKEW,
+    min_reward_to_risk=1.8,
+    max_loss_r=1.0,
+    requires_short_selling=True,
+    requires_leverage=False,
+    validation_notes=(
+        "research track: time-series momentum only when short realized volatility is below baseline",
+        "approximates volatility-managed momentum with a signal gate instead of runtime sizing",
+        "must survive fixed-universe and out-of-sample tests before paper use",
+    ),
+)

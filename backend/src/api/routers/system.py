@@ -1,9 +1,21 @@
 from fastapi import APIRouter, Depends, Request
 from datetime import datetime
 from typing import Dict, Any
+import logging
 import numpy as np
 
 from ..dependencies import get_realtime_service
+from src.config.runtime import (
+    get_execution_mode,
+    get_runtime_env,
+    get_trading_db_path,
+    is_paper_real_enabled,
+    is_real_ordering_enabled,
+    normalize_runtime_env,
+)
+
+
+logger = logging.getLogger(__name__)
 
 
 def _convert_numpy(obj):
@@ -29,20 +41,29 @@ router = APIRouter(
 )
 
 @router.get("/status")
-async def get_status():
+async def get_status(request: Request):
     """
     Health check endpoint to verify system status.
 
     SOTA (Jan 2026): Includes data_ready flag for frontend to know
     when all symbol data is pre-loaded and charts can render instantly.
     """
-    from fastapi import Request
-    from src.api.main import app
-
     # Get data readiness state from app.state
+    app = request.app
     data_ready = getattr(app.state, 'data_ready', False)
     ready_symbols = getattr(app.state, 'ready_symbols', [])
     startup_status = getattr(app.state, 'startup_status', 'initializing')
+    startup_phase = getattr(app.state, 'startup_phase', startup_status)
+    init_task = getattr(app.state, 'init_task', None)
+    init_task_done = bool(init_task.done()) if init_task else None
+    init_task_cancelled = bool(init_task.cancelled()) if init_task else None
+    init_task_exception = None
+    if init_task and init_task_done and not init_task_cancelled:
+        try:
+            exc = init_task.exception()
+            init_task_exception = repr(exc) if exc else None
+        except Exception as task_error:
+            init_task_exception = f"<exception unavailable: {task_error}>"
 
     return {
         "status": "ok",
@@ -52,7 +73,11 @@ async def get_status():
         # SOTA: Data readiness for frontend
         "data_ready": data_ready,
         "ready_symbol_count": len(ready_symbols),
-        "startup_status": startup_status
+        "startup_status": startup_status,
+        "startup_phase": startup_phase,
+        "init_task_done": init_task_done,
+        "init_task_cancelled": init_task_cancelled,
+        "init_task_exception": init_task_exception
     }
 
 
@@ -66,13 +91,6 @@ async def get_config():
     - Testnet: Yellow banner (demo money)
     - Live: RED banner (real money!)
     """
-    from src.config import (
-        get_execution_mode,
-        get_runtime_env,
-        is_paper_real_enabled,
-        is_real_ordering_enabled,
-    )
-
     env = get_runtime_env()
     execution_mode = get_execution_mode(env)
     paper_real = is_paper_real_enabled(env)
@@ -86,7 +104,7 @@ async def get_config():
         "real_ordering_enabled": real_ordering,
         "market_data_source": "binance_mainnet_live" if env == "paper" else f"binance_{env}",
         "execution_venue": "local_paper_simulator" if env == "paper" else f"binance_{env}",
-        "db_path": f"data/{env}/trading_system.db",
+        "db_path": str(get_trading_db_path(env)),
         "warning": (
             "REAL MONEY MODE!" if real_ordering
             else "PAPER-REAL: live Binance market data, local simulated orders only." if paper_real
@@ -107,10 +125,9 @@ async def switch_mode(new_mode: str):
         new_mode: 'paper' or 'testnet' (NOT 'live')
     """
     import os
-    from functools import lru_cache
-
-    current = os.getenv("ENV", "paper")
-    new_mode = new_mode.lower()
+    current = get_runtime_env()
+    requested_mode = new_mode.lower().strip()
+    new_mode = normalize_runtime_env(requested_mode)
 
     # SAFETY: Never allow runtime switch TO live
     if new_mode == "live":
@@ -129,10 +146,10 @@ async def switch_mode(new_mode: str):
         }
 
     # Validate mode
-    if new_mode not in ["paper", "testnet"]:
+    if requested_mode not in ["paper", "testnet"]:
         return {
             "success": False,
-            "error": f"Invalid mode: {new_mode}",
+            "error": f"Invalid mode: {requested_mode}",
             "valid_modes": ["paper", "testnet"]
         }
 
@@ -168,7 +185,7 @@ async def switch_mode(new_mode: str):
         "success": True,
         "previous_mode": current,
         "current_mode": new_mode,
-        "db_path": f"data/{new_mode}/trading_system.db",
+        "db_path": str(get_trading_db_path(new_mode)),
         "balance": balance,
         "message": f"Switched from {current} to {new_mode}. Ready."
     }
@@ -456,7 +473,7 @@ async def debug_signal_persistence():
     # 1. Check RealtimeService instances
     symbols_checked = []
     for key, instance in container._instances.items():
-        if key.startswith('realtime_service_'):
+        if isinstance(key, str) and key.startswith('realtime_service_'):
             symbol = key.replace('realtime_service_', '')
             has_lifecycle = hasattr(instance, '_lifecycle_service') and instance._lifecycle_service is not None
             symbols_checked.append({
@@ -468,11 +485,20 @@ async def debug_signal_persistence():
     result["services"]["realtime_instances"] = symbols_checked
 
     # 2. Check SignalLifecycleService
-    if 'signal_lifecycle_service' in container._instances:
-        lifecycle_svc = container._instances['signal_lifecycle_service']
+    lifecycle_key = next(
+        (
+            key for key in container._instances
+            if isinstance(key, str) and key.startswith('signal_lifecycle_service')
+        ),
+        None,
+    )
+
+    if lifecycle_key:
+        lifecycle_svc = container._instances[lifecycle_key]
         repo = lifecycle_svc.repo
         result["services"]["lifecycle_service"] = {
             "exists": True,
+            "key": lifecycle_key,
             "id": id(lifecycle_svc),
             "ttl_seconds": lifecycle_svc.ttl_seconds
         }
@@ -595,7 +621,16 @@ async def debug_signal_check():
     }
 
     # 1. State Machine Status
-    state_machine = realtime_service.state_machine
+    state_machine = getattr(realtime_service, "state_machine", None)
+    if state_machine is None:
+        from types import SimpleNamespace
+        is_running = bool(getattr(realtime_service, "_is_running", False))
+        state_machine = SimpleNamespace(
+            state=SimpleNamespace(name="RUNNING" if is_running else "STOPPED"),
+            can_receive_signals=is_running,
+            is_halted=False,
+            cooldown_remaining=0,
+        )
     result["state_machine"] = {
         "current_state": state_machine.state.name,
         "can_receive_signals": state_machine.can_receive_signals,
@@ -702,9 +737,11 @@ async def debug_signal_check():
 
         # Volume Spike
         volumes = [c.volume for c in candles_1m]
-        volume_spike_result = realtime_service.signal_generator.volume_spike_detector.detect_spike_from_list(
-            volumes=volumes,
-            ma_period=20
+        volume_spike_detector = getattr(realtime_service, "volume_spike_detector", None)
+        volume_spike_result = (
+            volume_spike_detector.detect_spike_from_list(volumes=volumes, ma_period=20)
+            if volume_spike_detector
+            else None
         )
         if volume_spike_result:
             result["indicators"]["volume"] = {
@@ -849,10 +886,11 @@ async def debug_signal_check():
         result["sell_conditions"] = sell_conditions
 
         # 7. Hard Filters
-        if realtime_service.hard_filters:
+        hard_filters = getattr(realtime_service, "hard_filters", None)
+        if hard_filters:
             result["hard_filters"]["adx_filter_enabled"] = True
             if adx_result:
-                adx_check = realtime_service.hard_filters.check_adx_filter(adx_result.adx_value)
+                adx_check = hard_filters.check_adx_filter(adx_result.adx_value)
                 result["hard_filters"]["adx_passed"] = adx_check.passed
                 result["hard_filters"]["adx_reason"] = adx_check.reason
 
@@ -912,7 +950,7 @@ async def enable_circuit_breaker(
     enabled_count = 0
 
     for key, service in container._instances.items():
-        if key.startswith('realtime_service_'):
+        if isinstance(key, str) and key.startswith('realtime_service_'):
             service.enable_circuit_breaker(
                 max_consecutive_losses=max_consecutive_losses,
                 cooldown_hours=cooldown_hours,
@@ -940,7 +978,7 @@ async def disable_circuit_breaker():
     disabled_count = 0
 
     for key, service in container._instances.items():
-        if key.startswith('realtime_service_'):
+        if isinstance(key, str) and key.startswith('realtime_service_'):
             service.disable_circuit_breaker()
             disabled_count += 1
 
@@ -969,7 +1007,7 @@ async def get_circuit_breaker_status():
     # Legacy: per-service CB status (for backwards compatibility)
     per_service = {}
     for key, service in container._instances.items():
-        if key.startswith('realtime_service_'):
+        if isinstance(key, str) and key.startswith('realtime_service_'):
             symbol = key.replace('realtime_service_', '')
             if hasattr(service, 'get_circuit_breaker_status'):
                 per_service[symbol] = service.get_circuit_breaker_status()

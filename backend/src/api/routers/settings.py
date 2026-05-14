@@ -18,6 +18,7 @@ from src.trading_contract import (
     PRODUCTION_BLOCKED_WINDOWS_STR,
     PRODUCTION_CB_MAX_DAILY_DRAWDOWN_PCT,
     PRODUCTION_LIMIT_CHASE_TIMEOUT_SECONDS,
+    PRODUCTION_MAX_LEVERAGE,
     PRODUCTION_ORDER_TTL_MINUTES,
     PRODUCTION_ORDER_TYPE,
     PRODUCTION_PORTFOLIO_TARGET_PCT,
@@ -39,7 +40,12 @@ class SettingsUpdate(BaseModel):
     risk_percent: Optional[float] = Field(None, ge=0.1, le=10.0, description="Risk per trade (0.1-10%)")
     # NOTE: rr_ratio removed - backtest uses SL/TP from strategy signal
     max_positions: Optional[int] = Field(None, ge=1, le=10, description="Max concurrent positions")
-    leverage: Optional[int] = Field(None, ge=1, le=20, description="Leverage (1-20x)")
+    leverage: Optional[int] = Field(
+        None,
+        ge=1,
+        le=PRODUCTION_MAX_LEVERAGE,
+        description=f"Leverage (1-{PRODUCTION_MAX_LEVERAGE}x)",
+    )
     auto_execute: Optional[bool] = Field(None, description="Auto-execute signals")
     execution_ttl_minutes: Optional[int] = Field(
         None,
@@ -379,6 +385,36 @@ async def update_settings(
                         f"🎯 LiveTradingService portfolio_target_pct synced to: {update_dict['portfolio_target_pct']}%"
                     )
 
+        runtime_risk_keys = {
+            'max_consecutive_losses',
+            'cooldown_minutes',
+            'daily_symbol_loss_limit',
+            'blocked_windows',
+            'blocked_windows_enabled',
+            'max_daily_drawdown_pct',
+        }
+        if runtime_risk_keys.intersection(update_dict):
+            from ..dependencies import get_container
+
+            container = get_container()
+            cb = container.get_circuit_breaker()
+            cb.update_params(
+                **{
+                    key: update_dict[key]
+                    for key in runtime_risk_keys
+                    if key in update_dict
+                }
+            )
+
+        try:
+            from ..dependencies import get_container
+
+            container = get_container()
+            settings_provider = container.get_settings_provider()
+            settings_provider.invalidate_cache()
+        except Exception as exc:
+            logger.debug(f"SettingsProvider cache invalidation skipped: {exc}")
+
         return SettingsResponse(**updated)
 
 
@@ -418,6 +454,7 @@ async def get_token_watchlist(
     custom_tokens_str = settings.get('custom_tokens', '')
     custom_tokens = set(custom_tokens_str.split(',')) if custom_tokens_str else set()
     custom_tokens.discard('')  # Remove empty string
+    custom_tokens.update(t for t in enabled_tokens if t and t not in DEFAULT_SYMBOLS)
 
     # Build response: Default tokens first, then custom tokens
     tokens = []
@@ -456,6 +493,13 @@ async def update_token_watchlist(
 
     # Store as comma-separated string
     paper_service.repo.set_setting('enabled_tokens', ','.join(enabled_tokens))
+
+    # Preserve non-default submitted symbols as custom tokens, otherwise they
+    # disappear from GET /settings/tokens after being enabled.
+    existing_custom = str(paper_service.repo.get_all_settings().get('custom_tokens', '') or '')
+    custom_tokens = {t for t in existing_custom.split(',') if t}
+    custom_tokens.update(t.symbol for t in watchlist.tokens if t.symbol not in DEFAULT_SYMBOLS)
+    paper_service.repo.set_setting('custom_tokens', ','.join(sorted(custom_tokens)))
 
     # Return updated watchlist
     return await get_token_watchlist(paper_service)

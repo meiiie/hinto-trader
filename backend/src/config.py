@@ -15,6 +15,13 @@ from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional
 from dotenv import load_dotenv
+from src.config.runtime import (
+    get_execution_mode,
+    get_runtime_env,
+    get_trading_db_path,
+    is_paper_real_enabled,
+    is_real_ordering_enabled,
+)
 
 
 def _ensure_env_loaded() -> None:
@@ -63,37 +70,6 @@ DEFAULT_MAX_BOOK_TICKER_AGE_SECONDS = 2.0
 DEFAULT_TRADING_MODE = "PAPER"
 
 
-def _env_flag(name: str, default: bool = False) -> bool:
-    value = os.getenv(name)
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
-
-
-def get_runtime_env() -> str:
-    """Return the normalized runtime environment."""
-    env = os.getenv("ENV", "paper").lower().strip()
-    return env if env in {"paper", "testnet", "live"} else "paper"
-
-
-def is_paper_real_enabled(env: Optional[str] = None) -> bool:
-    """Paper-real uses live market data with local-only simulated execution."""
-    resolved_env = (env or get_runtime_env()).lower().strip()
-    return resolved_env == "paper" and _env_flag("HINTO_PAPER_REAL", True)
-
-
-def get_execution_mode(env: Optional[str] = None) -> str:
-    """Return the execution profile shown to operators and UI."""
-    resolved_env = (env or get_runtime_env()).lower().strip()
-    if is_paper_real_enabled(resolved_env):
-        return "paper_real"
-    return resolved_env if resolved_env in {"paper", "testnet", "live"} else "paper"
-
-
-def is_real_ordering_enabled(env: Optional[str] = None) -> bool:
-    """Only ENV=live may send production orders."""
-    return (env or get_runtime_env()).lower().strip() == "live"
-
 # Multi-token configuration
 DEFAULT_SYMBOLS = [
     "BTCUSDT",
@@ -104,18 +80,6 @@ DEFAULT_SYMBOLS = [
     "FETUSDT",
     "ONDOUSDT",
 ]
-
-
-def get_trading_db_path(env: Optional[str] = None, base_dir: Optional[Path] = None) -> Path:
-    """Return the environment-aware trading DB path used by runtime services."""
-    resolved_env = env.lower().strip() if env else get_runtime_env()
-    if resolved_env not in {"paper", "testnet", "live"}:
-        resolved_env = "paper"
-
-    if base_dir is None:
-        base_dir = Path(__file__).resolve().parent.parent
-
-    return base_dir / "data" / resolved_env / "trading_system.db"
 
 
 @dataclass
@@ -197,6 +161,7 @@ class MultiTokenConfig:
                 cursor.execute("SELECT value FROM settings WHERE key = 'custom_tokens'")
                 custom_row = cursor.fetchone()
                 custom_tokens = set(custom_row[0].split(',')) if custom_row and custom_row[0] else set()
+                custom_tokens.discard('')
                 logging.info(f"📊 DEBUG: custom_tokens from DB = {custom_tokens}")
 
                 # Get enabled tokens
@@ -204,6 +169,10 @@ class MultiTokenConfig:
                 enabled_row = cursor.fetchone()
                 if enabled_row and enabled_row[0]:
                     enabled_tokens = set(enabled_row[0].split(','))
+                    enabled_tokens.discard('')
+                    # Older paper/live DBs may store custom symbols only in
+                    # enabled_tokens. Treat those as custom watchlist symbols.
+                    custom_tokens.update(t for t in enabled_tokens if t not in DEFAULT_SYMBOLS)
                 else:
                     # No enabled_tokens setting - use all defaults + custom
                     enabled_tokens = set(DEFAULT_SYMBOLS) | custom_tokens

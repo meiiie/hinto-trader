@@ -30,9 +30,9 @@ interface PendingSymbol {
     symbol: string;
     side: string;
     entry_price: number;
-    distance_pct: number;
+    distance_pct: number | null;
     locked: boolean;
-    confidence?: number;  // NEW: Signal confidence (0-1)
+    confidence?: number | null;  // NEW: Signal confidence (0-1)
     rank?: number;        // NEW: Position in confidence ranking
 }
 
@@ -339,7 +339,7 @@ export const SharkTankWatchlist: React.FC<SharkTankWatchlistProps> = ({
                                 key={order.symbol}
                                 symbol={order.symbol}
                                 state={order.locked ? 'locked' : 'pending'}
-                                side={order.side === 'BUY' ? 'LONG' : 'SHORT'}
+                                side={['BUY', 'LONG'].includes(order.side) ? 'LONG' : 'SHORT'}
                                 distancePct={order.distance_pct}
                                 confidence={order.confidence}
                                 rank={order.rank}
