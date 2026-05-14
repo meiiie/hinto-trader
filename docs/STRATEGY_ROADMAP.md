@@ -763,6 +763,56 @@ Next deterministic experiments:
   compare it against both the mean-reversion benchmark and
   `adaptive_momentum_pullback` on untouched windows.
 
+### Track L: Freqtrade Protection Cross-Check
+
+Purpose: learn from `https://github.com/freqtrade/freqtrade` without copying
+GPL-3 code into Hinto. The useful lessons are process-level:
+
+- run explicit lookahead and recursive-indicator checks before trusting a
+  strategy;
+- make protections opt-in for backtests so the operator can compare with and
+  without them;
+- separate pair-level protections from global protections;
+- record why a symbol was locked, not just that it was skipped.
+
+Hinto already had rough equivalents for `StoplossGuard`, daily symbol loss
+limits, direction blocks, and max drawdown. The missing low-risk idea was a
+`LowProfitPairs` analogue: lock a symbol when enough closed trades in a rolling
+lookback have total PnL below a threshold.
+
+Implementation status:
+
+- `CircuitBreaker` now supports research-only low-profit pair fields:
+  `low_profit_pair_trade_limit`, `low_profit_pair_lookback_hours`,
+  `low_profit_pair_cooldown_hours`, and `low_profit_pair_required_pnl`.
+- `run_backtest.py` exposes them as `--low-profit-pair-*` flags.
+- The guard blocks both long and short entries for that symbol, but only after
+  closed trades make the threshold observable.
+- `backend/tests/test_circuit_breaker_low_profit_pair.py` covers block,
+  expiry, and non-block behavior.
+
+Results:
+
+- Recent 3-month benchmark variants with `2` or `3` trade thresholds produced
+  the same `33` trades and about `+3.14%` audit return. The strictest variant
+  fired only `2` low-profit pair blocks and did not change outcome.
+- 1-year OOS breadth-gated benchmark with `2` trades / `168h` lookback /
+  `168h` cooldown fired `12` low-profit pair blocks but still failed:
+  checkpoint `checkpoint_20260514_164428_741816_1c6a3cc2bb51.json`,
+  `126` trades, about `-6.19%` audit return, PF `0.8039`, max DD `13.09%`,
+  bootstrap positive expectancy probability `13.05%`.
+
+Scoreboards:
+
+- `backend/research_scoreboard_freqtrade_lowprofit_20260514.md`
+- `backend/research_scoreboard_freqtrade_lowprofit_oos_1y_20260514.md`
+
+Decision: `REJECT` for Paper. This protection is architecturally clean and may
+help future strategy families, but it does not repair the current
+mean-reversion expectancy. Do not apply it to paper runtime. The more useful
+Freqtrade lesson is to add Hinto-native lookahead/recursive validation checks
+for every strategy family before running larger parameter searches.
+
 ## Broker Expansion Policy
 
 Do not wire live automation to a broker unless the broker has an official API

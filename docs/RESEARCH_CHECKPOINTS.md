@@ -548,3 +548,51 @@ composition explicit, gate entries by regime without blocking exits, and
 preserve next-bar/no-lookahead invariants. The next eligible Hinto improvement
 should be a pre-registered stop-before-target probability model or router, not
 another manually selected breakout/sweep variant.
+
+The next 2026-05-14 open-source cross-check reviewed
+`https://github.com/freqtrade/freqtrade`. Because Freqtrade is GPL-3, Hinto
+only used the concepts, not code. The most relevant concepts were explicit
+lookahead/recursive analysis and pair-level protections.
+
+Hinto already had analogues for stop-loss guards, daily loss limits, direction
+blocks, and max drawdown. The missing small experiment was a LowProfitPairs-like
+research guard:
+
+- `backend/src/application/risk_management/circuit_breaker.py` now has
+  research-only low-profit pair state;
+- `backend/run_backtest.py` exposes `--low-profit-pair-limit`,
+  `--low-profit-pair-lookback`, `--low-profit-pair-cooldown`, and
+  `--low-profit-pair-required-pnl`;
+- `backend/tests/test_circuit_breaker_low_profit_pair.py` verifies block,
+  expiry, and non-block cases.
+
+Tests run:
+
+- `python -m pytest backend/tests/test_circuit_breaker_low_profit_pair.py
+  backend/tests/test_research_checkpoint.py
+  backend/tests/test_apply_paper_checkpoint.py`
+- `python -m py_compile backend/src/application/risk_management/circuit_breaker.py
+  backend/run_backtest.py backend/scripts/checkpoint_research.py
+  backend/scripts/llm_research_advisor.py`
+
+Research results:
+
+- The recent 3-month breadth-gated benchmark with low-profit pair variants
+  stayed unchanged at `33` trades and about `+3.14%` audit return; the guard
+  either did not fire or fired too late to change outcome.
+- The 1-year OOS breadth-gated run with `2` trades / `168h` lookback / `168h`
+  cooldown fired `12` blocks but remained rejected:
+  checkpoint `checkpoint_20260514_164428_741816_1c6a3cc2bb51.json`, `126`
+  trades, about `-6.19%`, PF `0.8039`, max DD `13.09%`, bootstrap positive
+  expectancy probability `13.05%`.
+
+Scoreboards:
+
+- `backend/research_scoreboard_freqtrade_lowprofit_20260514.md`
+- `backend/research_scoreboard_freqtrade_lowprofit_oos_1y_20260514.md`
+
+Conclusion: no Paper runtime setting was changed. LowProfitPairs-style locking
+is a clean risk-control primitive, but it is not an edge and it does not rescue
+the current entry family. The next Freqtrade-inspired improvement should be a
+Hinto-native lookahead/recursive validation tool, not another protection
+parameter search.

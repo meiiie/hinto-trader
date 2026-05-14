@@ -637,6 +637,14 @@ async def main():
                        help="[RISK] Rolling window in hours for symbol+side loss quarantine. Default: 72")
     parser.add_argument("--symbol-side-cooldown", type=float, default=72.0,
                        help="[RISK] Cooldown hours after symbol+side rolling loss limit hit. Default: 72")
+    parser.add_argument("--low-profit-pair-limit", type=int, default=0,
+                       help="[RISK] Freqtrade-inspired: block symbol after N closed trades in lookback if total PnL is below threshold. 0=disabled.")
+    parser.add_argument("--low-profit-pair-lookback", type=float, default=24.0,
+                       help="[RISK] Lookback hours for low-profit pair protection. Default: 24")
+    parser.add_argument("--low-profit-pair-cooldown", type=float, default=24.0,
+                       help="[RISK] Cooldown hours after low-profit pair protection triggers. Default: 24")
+    parser.add_argument("--low-profit-pair-required-pnl", type=float, default=0.0,
+                       help="[RISK] Minimum total PnL in USD required over the low-profit pair lookback. Default: 0")
     # INSTITUTIONAL (Feb 2026): 3 New Strategies for A/B Testing
     parser.add_argument("--adx-regime-filter", action="store_true",
                        help="[INSTITUTIONAL] Filter signals by ADX regime. ADX<20=block, 20-25=penalty. Default: OFF")
@@ -1252,6 +1260,12 @@ async def main():
             f"Symbol-Side Quarantine: {args.symbol_side_loss_limit} losses/{args.symbol_side_loss_window}h "
             f"-> {args.symbol_side_cooldown}h block"
         )
+    if args.low_profit_pair_limit > 0:
+        print(
+            f"Low-Profit Pair Guard: {args.low_profit_pair_limit} trades/{args.low_profit_pair_lookback}h "
+            f"with total PnL < ${args.low_profit_pair_required_pnl:.2f} "
+            f"-> {args.low_profit_pair_cooldown}h block"
+        )
     if args.daily_loss_size_penalty > 0:
         print(f"📉 Daily Loss Size Penalty: -{args.daily_loss_size_penalty*100:.0f}%/loss (0 loss=100%, 1={100-args.daily_loss_size_penalty*100:.0f}%, 2={max(0,100-args.daily_loss_size_penalty*200):.0f}%, 3={max(0,100-args.daily_loss_size_penalty*300):.0f}%, 4={max(0,100-args.daily_loss_size_penalty*400):.0f}%)")
     print(f"📋 Signal Confirmation: {'ENABLED (2x)' if args.confirm else 'DISABLED'}")
@@ -1634,7 +1648,15 @@ async def main():
     loader = HistoricalDataLoader()
 
     circuit_breaker = None
-    if args.cb or args.daily_symbol_loss_limit > 0 or args.daily_loss_size_penalty > 0 or args.symbol_side_loss_limit > 0 or args.escalating_cb or args.direction_block:
+    if (
+        args.cb
+        or args.daily_symbol_loss_limit > 0
+        or args.daily_loss_size_penalty > 0
+        or args.symbol_side_loss_limit > 0
+        or args.low_profit_pair_limit > 0
+        or args.escalating_cb
+        or args.direction_block
+    ):
         from src.application.risk_management.circuit_breaker import CircuitBreaker
         circuit_breaker = CircuitBreaker(
             max_consecutive_losses=args.max_losses if args.cb else 999,
@@ -1646,6 +1668,10 @@ async def main():
             symbol_side_loss_limit=args.symbol_side_loss_limit,
             symbol_side_loss_window_hours=args.symbol_side_loss_window,
             symbol_side_cooldown_hours=args.symbol_side_cooldown,
+            low_profit_pair_trade_limit=args.low_profit_pair_limit,
+            low_profit_pair_lookback_hours=args.low_profit_pair_lookback,
+            low_profit_pair_cooldown_hours=args.low_profit_pair_cooldown,
+            low_profit_pair_required_pnl=args.low_profit_pair_required_pnl,
             # F1: Escalating CB Cooldown
             use_escalating_cooldown=args.escalating_cb,
             escalating_schedule_str=args.escalating_cb_schedule,
@@ -1888,6 +1914,13 @@ async def main():
         risk_stats.append(f"  Symbol-Side Quarantines: {circuit_breaker._blocked_by_symbol_side_window}")
         risk_stats.append(
             f"  Threshold: {args.symbol_side_loss_limit} losses / {args.symbol_side_loss_window}h -> {args.symbol_side_cooldown}h block"
+        )
+    if args.low_profit_pair_limit > 0 and circuit_breaker:
+        risk_stats.append(f"  Low-Profit Pair Blocks: {circuit_breaker._blocked_by_low_profit_pair}")
+        risk_stats.append(
+            f"  Threshold: {args.low_profit_pair_limit} trades / {args.low_profit_pair_lookback}h "
+            f"with total PnL < ${args.low_profit_pair_required_pnl:.2f} -> "
+            f"{args.low_profit_pair_cooldown}h block"
         )
     if args.balance_ramp:
         risk_stats.append(f"  Balance Ramp Adjustments: {simulator._ramp_adjustments}")

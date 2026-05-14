@@ -51,6 +51,7 @@ UNSUPPORTED_PAPER_SUGGESTION_FLAGS = (
     "fix_vwap",
     "funding_filter",
     "daily_loss_size_penalty",
+    "low_profit_pair_limit",
     "max_same_direction",
     "no_compound",
     "regime_filter",
